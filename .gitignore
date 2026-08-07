@@ -1,0 +1,15 @@
+backend/target/
+frontend/dist/
+frontend/node_modules/
+frontend/*.log
+*.tsbuildinfo
+*.log
+.idea/
+.vscode/
+*.iml
+.classpath
+.project
+.settings/
+.env
+.env.*
+!.env.example
