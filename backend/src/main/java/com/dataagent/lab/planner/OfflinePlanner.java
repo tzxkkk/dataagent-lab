@@ -5,19 +5,44 @@ import com.dataagent.lab.domain.PlannerUsage;
 import com.dataagent.lab.domain.ToolInvocation;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 public class OfflinePlanner implements AgentPlanner {
     private static final PlannerDescriptor DESCRIPTOR = new PlannerDescriptor(
             "offline", "offline-rules-v2", "deterministic", true
     );
+    private static final Pattern MONTH_PATTERN = Pattern.compile(
+            "\\b(20\\d{2}-(?:0[1-9]|1[0-2]))\\b"
+    );
 
     @Override
     public AgentPlan plan(String input) {
         String normalized = input.toLowerCase(Locale.ROOT);
+
+        if (containsAny(normalized, "分表", "物理表", "月份路由", "路由到", "partition")) {
+            String datasetId = datasetId(normalized);
+            List<String> months = months(normalized);
+            Map<String, Object> arguments = new LinkedHashMap<>();
+            arguments.put("datasetId", datasetId);
+            if (!months.isEmpty()) {
+                arguments.put("startMonth", months.get(0));
+                arguments.put("endMonth", months.size() == 1 ? months.get(0) : months.get(1));
+            }
+            return plan("Resolve a logical dataset to maintained physical tables",
+                    "resolve_dataset_tables", arguments);
+        }
+
+        if (containsAny(normalized, "逻辑数据集", "主题域", "logical dataset", "datasets")) {
+            return plan("Search the business-oriented logical data catalog",
+                    "search_datasets", Map.of("query", datasetQuery(normalized, input)));
+        }
 
         if (containsAny(normalized, "表结构", "结构", "字段", "schema", "column")) {
             String tableName = containsAny(normalized, "用户", "dim_user", "user")
@@ -174,5 +199,46 @@ public class OfflinePlanner implements AgentPlanner {
             }
         }
         return false;
+    }
+
+    private String datasetId(String input) {
+        if (containsAny(input, "支付", "payment")) {
+            return "payments";
+        }
+        if (containsAny(input, "退款", "refund")) {
+            return "refunds";
+        }
+        if (containsAny(input, "库存", "inventory")) {
+            return "inventory";
+        }
+        return "orders";
+    }
+
+    private String datasetQuery(String normalized, String original) {
+        if (containsAny(normalized, "交易", "transaction")) {
+            return "交易";
+        }
+        if (containsAny(normalized, "供应链", "supply chain")) {
+            return "供应链";
+        }
+        if (containsAny(normalized, "支付", "payment")) {
+            return "支付";
+        }
+        if (containsAny(normalized, "退款", "refund")) {
+            return "退款";
+        }
+        if (containsAny(normalized, "订单", "order")) {
+            return "订单";
+        }
+        return original;
+    }
+
+    private List<String> months(String input) {
+        List<String> months = new ArrayList<>();
+        Matcher matcher = MONTH_PATTERN.matcher(input);
+        while (matcher.find() && months.size() < 2) {
+            months.add(matcher.group(1));
+        }
+        return months;
     }
 }

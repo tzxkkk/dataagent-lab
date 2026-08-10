@@ -29,7 +29,9 @@ public class PlanPreviewFactory {
         List<String> sourceTables = sourceTables(toolName, arguments, sql);
         List<String> filters = filters(sql);
         List<String> assumptions = assumptions(toolName, sql);
-        int rowLimit = toolName.equals("run_readonly_sql") ? 200 : toolName.equals("search_metadata") ? 10 : 0;
+        int rowLimit = toolName.equals("run_readonly_sql")
+                ? 200
+                : toolName.equals("search_metadata") || toolName.equals("search_datasets") ? 10 : 0;
 
         return new PlanPreview(
                 plan.rationale(),
@@ -50,6 +52,15 @@ public class PlanPreviewFactory {
         }
         if (toolName.equals("search_metadata")) {
             return List.of("metadata_catalog");
+        }
+        if (toolName.equals("search_datasets")) {
+            return List.of("logical_dataset", "dataset_physical_table");
+        }
+        if (toolName.equals("resolve_dataset_tables")) {
+            return List.of("dataset_physical_table");
+        }
+        if (sql == null) {
+            return List.of();
         }
         Set<String> tables = new LinkedHashSet<>();
         Matcher matcher = TABLE_PATTERN.matcher(sql);
@@ -83,6 +94,10 @@ public class PlanPreviewFactory {
         }
         if (toolName.equals("run_readonly_sql")) {
             assumptions.add("仅执行单条只读 SELECT，结果最多返回 200 行");
+        } else if (toolName.equals("resolve_dataset_tables")) {
+            assumptions.add("仅按已维护映射解析物理表，不直接拼接或执行跨分表 SQL");
+        } else if (toolName.equals("search_datasets")) {
+            assumptions.add("仅搜索逻辑数据目录，不直接扫描物理业务表");
         } else {
             assumptions.add("仅查询元数据，不读取或修改业务数据");
         }
