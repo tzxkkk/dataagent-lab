@@ -51,7 +51,7 @@ class AgentWorkflowTest {
         assertThat(completed.getEvidence().resultData()).containsKey("rows");
         assertThatThrownBy(() -> runService.approve(preview.getId()))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("expected WAITING_FOR_APPROVAL");
+                .hasMessageContaining("预期状态为 WAITING_FOR_APPROVAL");
     }
 
     @Test

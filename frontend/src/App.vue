@@ -68,7 +68,7 @@ const selectedPlanner = ref('openai')
 const evaluationPlanner = ref('offline')
 const planners = ref<PlannerDescriptor[]>([
   { mode: 'offline', promptVersion: 'offline-rules-v2', model: 'deterministic', ready: true },
-  { mode: 'openai', promptVersion: 'data-planner-v1', model: 'unconfigured', ready: false },
+  { mode: 'openai', promptVersion: 'data-planner-v3', model: '未配置', ready: false },
 ])
 
 const selectedDescriptor = computed(() => planners.value.find((item) => item.mode === selectedPlanner.value))
@@ -87,7 +87,7 @@ onMounted(async () => {
     const readyModelPlanner = planners.value.find((planner) => planner.mode === 'openai' && planner.ready)
     selectedPlanner.value = readyModelPlanner?.mode ?? 'offline'
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : 'Planner 列表加载失败'
+    error.value = cause instanceof Error ? cause.message : '规划器列表加载失败'
   }
 })
 
@@ -184,12 +184,12 @@ function selectEvaluationPlanner(mode: string) {
 }
 
 function plannerLabel(mode: string) {
-  return mode === 'offline' ? '离线基线' : '模型 Planner'
+  return mode === 'offline' ? '离线基线' : '模型规划'
 }
 
 function categoryLabel(category: string) {
   const labels: Record<string, string> = {
-    metadata: '元数据检索', schema: 'Schema 路由', sql_aggregation: 'SQL 聚合', sql_filtering: '条件查询',
+    metadata: '元数据检索', schema: '表结构路由', sql_aggregation: 'SQL 聚合', sql_filtering: '条件查询',
   }
   return labels[category] ?? category
 }
@@ -200,6 +200,35 @@ function statusLabel(status: AgentRun['status']) {
     WAITING_FOR_APPROVAL: '等待确认', RUNNING: '执行中', SUCCEEDED: '已完成', FAILED: '失败',
   }
   return labels[status]
+}
+
+function riskLabel(riskLevel: string) {
+  const labels: Record<string, string> = {
+    LOW_READ_ONLY: '低风险·只读',
+    METADATA_ONLY: '仅元数据',
+  }
+  return labels[riskLevel] ?? riskLevel
+}
+
+function eventTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    RUN_CREATED: '请求已创建',
+    PLANNING_STARTED: '开始规划',
+    PLANNING_TOOL_SUCCEEDED: '规划工具成功',
+    PLANNING_TOOL_FAILED: '规划工具失败',
+    CLARIFICATION_REQUIRED: '需要澄清',
+    CLARIFICATION_RESOLVED: '澄清已完成',
+    PLAN_CREATED: '计划已生成',
+    PLAN_REVIEW_REQUIRED: '等待确认',
+    APPROVAL_RECEIVED: '已收到确认',
+    TOOL_STARTED: '开始执行工具',
+    TOOL_SUCCEEDED: '工具执行成功',
+    RUN_SUCCEEDED: '请求执行成功',
+    RUN_FAILED: '请求执行失败',
+    REVISION_REQUESTED: '请求修改计划',
+    FEEDBACK_RECORDED: '反馈已记录',
+  }
+  return labels[type] ?? type
 }
 
 function displayValue(value: unknown) {
@@ -220,14 +249,14 @@ function eventIcon(traceEvent: TraceEvent) {
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark"><TerminalSquare :size="19" /></div>
-        <div><strong>DataAgent Lab</strong><span>user-centered agent harness</span></div>
+        <div><strong>DataAgent Lab</strong><span>面向用户的数据智能体执行框架</span></div>
       </div>
       <nav class="view-switch" aria-label="视图切换">
         <button :class="{ active: view === 'run' }" @click="view = 'run'"><Activity :size="16" />工作流</button>
         <button :class="{ active: view === 'evaluation' }" @click="view = 'evaluation'"><FlaskConical :size="16" />评测</button>
       </nav>
       <div class="runtime-status" :class="{ unavailable: !runtimeReady }">
-        <span></span>{{ runtimeReady ? 'Harness ready' : 'Planner unavailable' }}
+        <span></span>{{ runtimeReady ? '运行环境已就绪' : '规划器不可用' }}
       </div>
     </header>
 
@@ -253,13 +282,13 @@ function eventIcon(traceEvent: TraceEvent) {
 
       <section class="run-console">
         <div class="console-heading">
-          <div><span class="section-label">User Workflow</span><h1>数据分析请求</h1></div>
+          <div><span class="section-label">用户流程</span><h1>数据分析请求</h1></div>
           <span v-if="run" class="run-id">{{ run.id.slice(0, 8) }}</span>
         </div>
 
         <div class="planner-bar">
-          <span>Planner</span>
-          <div class="mode-switch" role="group" aria-label="运行 Planner">
+          <span>规划模式</span>
+          <div class="mode-switch" role="group" aria-label="运行规划器">
             <button
               v-for="planner in planners"
               :key="planner.mode"
@@ -297,7 +326,7 @@ function eventIcon(traceEvent: TraceEvent) {
         <section v-if="run?.status === 'WAITING_FOR_APPROVAL' && run.planPreview" class="workflow-card plan-card">
           <div class="card-title-row">
             <div><span class="card-kicker"><Eye :size="16" />执行前预览</span><h2>{{ run.planPreview.interpretation }}</h2></div>
-            <span class="risk-badge">{{ run.planPreview.riskLevel }}</span>
+            <span class="risk-badge">{{ riskLabel(run.planPreview.riskLevel) }}</span>
           </div>
           <div class="plan-grid">
             <div><span>使用工具</span><code>{{ run.planPreview.toolName }}</code></div>
@@ -319,7 +348,7 @@ function eventIcon(traceEvent: TraceEvent) {
         <section v-if="run?.status === 'SUCCEEDED' && run.evidence" class="workflow-card evidence-card">
           <div class="card-title-row">
             <div><span class="card-kicker"><Check :size="16" />执行完成</span><h2>{{ run.evidence.summary }}</h2></div>
-            <span class="success-badge">{{ run.durationMs }} ms</span>
+            <span class="success-badge">{{ run.durationMs }} 毫秒</span>
           </div>
           <div class="evidence-strip">
             <div><span>数据来源</span><strong>{{ run.evidence.sourceTables.join('、') }}</strong></div>
@@ -376,19 +405,19 @@ function eventIcon(traceEvent: TraceEvent) {
 
       <aside class="trace-panel">
         <div class="trace-heading">
-          <div><span class="section-label">Developer Trace</span><h2>执行轨迹</h2></div>
-          <span v-if="run">{{ run.events.length }} events</span>
+          <div><span class="section-label">开发者追踪</span><h2>执行轨迹</h2></div>
+          <span v-if="run">{{ run.events.length }} 条事件</span>
         </div>
         <div v-if="run" class="run-summary">
           <span :class="`run-status ${run.status.toLowerCase()}`">{{ statusLabel(run.status) }}</span>
           <code>{{ run.plannerUsage.promptVersion }}</code>
-          <small>{{ run.plannerUsage.inputTokens }} in / {{ run.plannerUsage.outputTokens }} out tokens</small>
-          <small v-if="run.parentRunId">branch from {{ run.parentRunId.slice(0, 8) }}</small>
+          <small>输入 {{ run.plannerUsage.inputTokens }} / 输出 {{ run.plannerUsage.outputTokens }} Token</small>
+          <small v-if="run.parentRunId">来源分支 {{ run.parentRunId.slice(0, 8) }}</small>
         </div>
         <ol v-if="run" class="trace-list">
           <li v-for="traceEvent in run.events" :key="traceEvent.sequence">
             <div class="trace-node" :class="{ tool: traceEvent.type.includes('TOOL') }"><component :is="eventIcon(traceEvent)" :size="14" /></div>
-            <div class="trace-content"><strong>{{ traceEvent.type }}</strong><p>{{ traceEvent.message }}</p></div>
+            <div class="trace-content"><strong>{{ eventTypeLabel(traceEvent.type) }}</strong><p>{{ traceEvent.message }}</p></div>
             <time>{{ traceEvent.sequence.toString().padStart(2, '0') }}</time>
           </li>
         </ol>
@@ -398,9 +427,9 @@ function eventIcon(traceEvent: TraceEvent) {
 
     <main v-else class="evaluation-workspace">
       <section class="evaluation-header">
-        <div><span class="section-label">Golden Set</span><h1>{{ evaluationPlanner === 'offline' ? '离线评测' : '模型评测' }}</h1></div>
+        <div><span class="section-label">黄金测试集</span><h1>{{ evaluationPlanner === 'offline' ? '离线评测' : '模型评测' }}</h1></div>
         <div class="evaluation-actions">
-          <div class="mode-switch" role="group" aria-label="评测 Planner">
+          <div class="mode-switch" role="group" aria-label="评测规划器">
             <button
               v-for="planner in planners" :key="planner.mode" :class="{ active: evaluationPlanner === planner.mode }"
               :disabled="!planner.ready || evaluating" @click="selectEvaluationPlanner(planner.mode)"
@@ -427,15 +456,15 @@ function eventIcon(traceEvent: TraceEvent) {
       <section class="case-table-wrap">
         <div class="table-heading"><span>评测用例</span><span v-if="report">{{ new Date(report.generatedAt).toLocaleTimeString('zh-CN') }}</span></div>
         <div v-if="report" class="evaluation-context">
-          <span>mode <strong>{{ report.mode }}</strong></span><span>prompt <code>{{ report.promptVersion }}</code></span>
-          <span>model <strong>{{ report.model }}</strong></span><span>tokens <strong>{{ report.inputTokens }} in / {{ report.outputTokens }} out</strong></span>
+          <span>模式 <strong>{{ plannerLabel(report.mode) }}</strong></span><span>提示词版本 <code>{{ report.promptVersion }}</code></span>
+          <span>模型 <strong>{{ report.model }}</strong></span><span>Token <strong>输入 {{ report.inputTokens }} / 输出 {{ report.outputTokens }}</strong></span>
         </div>
         <table>
           <thead><tr><th>用例</th><th>类别</th><th>工具</th><th>工具选择</th><th>延迟</th><th>结果</th></tr></thead>
           <tbody v-if="report">
             <tr v-for="item in report.cases" :key="item.caseId">
               <td>{{ item.caseId }}</td><td><span class="category-badge">{{ categoryLabel(item.category) }}</span></td><td><code>{{ item.actualTool }}</code></td>
-              <td>{{ item.toolSelectionCorrect ? '正确' : '错误' }}</td><td>{{ item.latencyMs }} ms</td>
+              <td>{{ item.toolSelectionCorrect ? '正确' : '错误' }}</td><td>{{ item.latencyMs }} 毫秒</td>
               <td><span v-if="item.passed" class="pass-badge"><Check :size="14" />通过</span><span v-else class="fail-badge"><X :size="14" />失败</span><small v-if="item.failureReason" class="case-reason">{{ item.failureReason }}</small></td>
             </tr>
           </tbody>

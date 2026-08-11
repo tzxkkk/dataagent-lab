@@ -26,7 +26,7 @@ class ReadOnlySqlToolTest {
         var result = tool.execute(Map.of("sql", "DELETE FROM fact_order"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("Only SELECT");
+        assertThat(result.summary()).contains("只允许 SELECT");
     }
 
     @Test
@@ -34,7 +34,7 @@ class ReadOnlySqlToolTest {
         var result = tool.execute(Map.of("sql", "SELECT * FROM fact_order; DELETE FROM fact_order"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("one SQL statement");
+        assertThat(result.summary()).contains("只允许一条 SQL 语句");
     }
 
     @Test
@@ -43,7 +43,7 @@ class ReadOnlySqlToolTest {
                 + "GROUP BY status UNION ALL SELECT status, SUM(order_amount) FROM fact_order_202608 GROUP BY status"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("aggregate once in an outer SELECT");
+        assertThat(result.summary()).contains("外层 SELECT 统一聚合");
     }
 
     @Test
@@ -51,7 +51,7 @@ class ReadOnlySqlToolTest {
         var result = tool.execute(Map.of("sql", "SELECT input_text FROM agent_run"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("internal Agent persistence tables");
+        assertThat(result.summary()).contains("Agent 内部持久化表");
     }
 
     @Test
@@ -59,7 +59,7 @@ class ReadOnlySqlToolTest {
         var result = tool.execute(Map.of("sql", "SELECT * FROM unknown_business_table"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("not in the business metadata catalog");
+        assertThat(result.summary()).contains("不在业务目录白名单");
     }
 
     @Test
@@ -67,6 +67,14 @@ class ReadOnlySqlToolTest {
         var result = tool.execute(Map.of("sql", "SELECT * FROM mysql.user"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).contains("Cross-schema");
+        assertThat(result.summary()).contains("跨 Schema");
+    }
+
+    @Test
+    void translatesDatabaseGrammarErrorsForUsers() {
+        var result = tool.execute(Map.of("sql", "SELECT missing_column FROM fact_order"));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.summary()).isEqualTo("SQL 执行失败：字段、表名或 SQL 结构不正确");
     }
 }

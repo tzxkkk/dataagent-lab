@@ -25,7 +25,7 @@ public class PhysicalTableResolver {
                 normalizedDatasetId
         );
         if (matches == null || matches == 0) {
-            throw new IllegalArgumentException("Unknown logical dataset: " + normalizedDatasetId);
+            throw new IllegalArgumentException("未知逻辑数据集：" + normalizedDatasetId);
         }
 
         if ((startMonth == null || startMonth.isBlank()) && (endMonth == null || endMonth.isBlank())) {
@@ -71,7 +71,7 @@ public class PhysicalTableResolver {
 
     private String required(String value, String fieldName) {
         if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(fieldName + " is required");
+            throw new IllegalArgumentException(fieldName + " 不能为空");
         }
         return value.trim().toLowerCase(Locale.ROOT);
     }

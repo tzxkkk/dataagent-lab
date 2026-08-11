@@ -26,7 +26,7 @@ public class DatasetContextTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Load a logical dataset, maintained field semantics, physical table mappings, and join relationships";
+        return "读取逻辑数据集、字段语义、物理表映射和关联关系";
     }
 
     @Override
@@ -67,7 +67,7 @@ public class DatasetContextTool implements AgentTool {
                     datasetId
             );
             if (datasets.isEmpty()) {
-                return ToolResult.failure("Unknown logical dataset: " + datasetId);
+            return ToolResult.failure("未知逻辑数据集：" + datasetId);
             }
 
             List<Map<String, Object>> physicalTables = resolver.resolve(datasetId, startMonth, endMonth);
@@ -89,7 +89,7 @@ public class DatasetContextTool implements AgentTool {
             data.put("fields", fields);
             data.put("physicalTables", physicalTables);
             data.put("relations", relations);
-            return ToolResult.success("Loaded context for logical dataset " + datasetId, data);
+            return ToolResult.success("已读取逻辑数据集 " + datasetId + " 的上下文", data);
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(exception.getMessage());
         }

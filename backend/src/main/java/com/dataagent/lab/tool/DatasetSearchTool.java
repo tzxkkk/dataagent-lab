@@ -22,7 +22,7 @@ public class DatasetSearchTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Search logical datasets by business term, domain, grain, or owner";
+        return "按业务术语、领域、粒度或负责人搜索逻辑数据集";
     }
 
     @Override
@@ -42,7 +42,7 @@ public class DatasetSearchTool implements AgentTool {
     public ToolResult execute(Map<String, Object> arguments) {
         String query = String.valueOf(arguments.getOrDefault("query", "")).trim();
         if (query.isBlank()) {
-            return ToolResult.failure("query is required");
+            return ToolResult.failure("搜索词不能为空");
         }
 
         String pattern = "%" + query.toLowerCase() + "%";
@@ -62,6 +62,6 @@ public class DatasetSearchTool implements AgentTool {
                         + "ORDER BY d.trust_status, d.dataset_id LIMIT 10",
                 pattern, pattern, pattern, pattern, pattern, pattern
         );
-        return ToolResult.success("Found " + rows.size() + " logical datasets", Map.of("rows", rows));
+        return ToolResult.success("找到 " + rows.size() + " 个逻辑数据集", Map.of("rows", rows));
     }
 }

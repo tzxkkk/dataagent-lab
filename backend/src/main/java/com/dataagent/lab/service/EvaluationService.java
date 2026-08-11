@@ -95,7 +95,7 @@ public class EvaluationService {
         AgentPlanner planner = plannerRegistry.require(plannerMode);
         PlannerDescriptor descriptor = planner.descriptor();
         if (!descriptor.ready()) {
-            throw new IllegalArgumentException("Planner mode is not configured: " + descriptor.mode());
+            throw new IllegalArgumentException("规划模式尚未配置：" + descriptor.mode());
         }
 
         List<EvaluationCase> evaluationCases = cases();
@@ -176,12 +176,12 @@ public class EvaluationService {
             return run.getError();
         }
         if (!toolCorrect) {
-            return "Unexpected tool selection";
+            return "工具选择不符合预期";
         }
         if (!missingFragments.isEmpty()) {
-            return "Missing expected output fragments: " + missingFragments;
+            return "结果缺少预期内容：" + missingFragments;
         }
-        return "Unknown evaluation failure";
+        return "未知评测失败";
     }
 
     private double ratio(int numerator, int denominator) {

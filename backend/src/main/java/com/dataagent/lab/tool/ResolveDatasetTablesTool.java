@@ -23,7 +23,7 @@ public class ResolveDatasetTablesTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Resolve a logical dataset and optional yyyy-MM range to maintained physical table mappings";
+        return "根据逻辑数据集和可选月份范围解析已维护的物理表映射";
     }
 
     @Override
@@ -63,7 +63,7 @@ public class ResolveDatasetTablesTool implements AgentTool {
             data.put("startMonth", startMonth);
             data.put("endMonth", endMonth);
             data.put("physicalTables", physicalTables);
-            return ToolResult.success("Resolved " + physicalTables.size() + " physical tables", data);
+            return ToolResult.success("解析到 " + physicalTables.size() + " 张物理表", data);
         } catch (IllegalArgumentException exception) {
             return ToolResult.failure(exception.getMessage());
         }

@@ -221,7 +221,7 @@ public class AgentRunRepository {
         try {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize persisted Agent run data", exception);
+            throw new IllegalStateException("无法序列化持久化的 Agent 请求数据", exception);
         }
     }
 
@@ -233,7 +233,7 @@ public class AgentRunRepository {
         try {
             return objectMapper.readValue(json, type);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not deserialize persisted Agent run data", exception);
+            throw new IllegalStateException("无法反序列化持久化的 Agent 请求数据", exception);
         }
     }
 
@@ -241,7 +241,7 @@ public class AgentRunRepository {
         try {
             return objectMapper.readValue(json, type);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not deserialize persisted Agent run data", exception);
+            throw new IllegalStateException("无法反序列化持久化的 Agent 请求数据", exception);
         }
     }
 }

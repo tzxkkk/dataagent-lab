@@ -21,13 +21,13 @@ public class PlannerRegistry {
         for (AgentPlanner planner : planners) {
             String mode = normalize(planner.descriptor().mode());
             if (registered.put(mode, planner) != null) {
-                throw new IllegalStateException("Duplicate planner mode: " + mode);
+                throw new IllegalStateException("规划模式重复：" + mode);
             }
         }
         this.planners = Map.copyOf(registered);
         this.defaultMode = normalize(defaultMode);
         if (!this.planners.containsKey(this.defaultMode)) {
-            throw new IllegalStateException("Unknown default planner mode: " + this.defaultMode);
+            throw new IllegalStateException("未知默认规划模式：" + this.defaultMode);
         }
     }
 
@@ -35,7 +35,7 @@ public class PlannerRegistry {
         String selectedMode = mode == null || mode.isBlank() ? defaultMode : normalize(mode);
         AgentPlanner planner = planners.get(selectedMode);
         if (planner == null) {
-            throw new IllegalArgumentException("Unknown planner mode: " + selectedMode);
+            throw new IllegalArgumentException("未知规划模式：" + selectedMode);
         }
         return planner;
     }

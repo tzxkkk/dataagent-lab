@@ -64,7 +64,7 @@ class OpenAiCompatiblePlannerTest {
     @Test
     void parsesToolSelectionPromptVersionAndTokenUsage() throws Exception {
         respondWithContent(
-                "{\"action\":\"final\",\"rationale\":\"Use the SQL tool\",\"toolName\":\"run_readonly_sql\","
+                "{\"action\":\"final\",\"rationale\":\"使用只读 SQL 工具\",\"toolName\":\"run_readonly_sql\","
                         + "\"arguments\":{\"sql\":\"SELECT 1\"}}",
                 17,
                 9
@@ -72,7 +72,7 @@ class OpenAiCompatiblePlannerTest {
 
         var plan = planner.plan("Run a safe query");
 
-        assertThat(plan.rationale()).isEqualTo("Use the SQL tool");
+        assertThat(plan.rationale()).isEqualTo("使用只读 SQL 工具");
         assertThat(plan.invocations()).singleElement().satisfies(invocation -> {
             assertThat(invocation.toolName()).isEqualTo("run_readonly_sql");
             assertThat(invocation.arguments()).containsEntry("sql", "SELECT 1");
@@ -100,7 +100,7 @@ class OpenAiCompatiblePlannerTest {
                 4
         );
         respondWithContent(
-                "{\"action\":\"final\",\"rationale\":\"Run grounded SQL\","
+                "{\"action\":\"final\",\"rationale\":\"执行有数据依据的 SQL\","
                         + "\"toolName\":\"run_readonly_sql\",\"arguments\":{\"sql\":\"SELECT 1\"}}",
                 23,
                 7
@@ -123,7 +123,7 @@ class OpenAiCompatiblePlannerTest {
     @Test
     void returnsModelGeneratedClarificationWithoutSelectingATool() throws Exception {
         respondWithContent(
-                "{\"action\":\"clarify\",\"rationale\":\"Metric is ambiguous\","
+                "{\"action\":\"clarify\",\"rationale\":\"指标存在歧义\","
                         + "\"question\":\"你想统计订单数量还是金额？\",\"options\":["
                         + "{\"label\":\"订单数量\",\"resolvedInput\":\"统计订单数量\"},"
                         + "{\"label\":\"订单金额\",\"resolvedInput\":\"统计订单金额\"}]}",
@@ -148,7 +148,7 @@ class OpenAiCompatiblePlannerTest {
                 3
         );
         respondWithContent(
-                "{\"action\":\"final\",\"rationale\":\"Submit SQL for approval\","
+                "{\"action\":\"final\",\"rationale\":\"提交 SQL 等待用户确认\","
                         + "\"toolName\":\"run_readonly_sql\",\"arguments\":{\"sql\":\"SELECT 1\"}}",
                 14,
                 5
@@ -169,14 +169,14 @@ class OpenAiCompatiblePlannerTest {
     @Test
     void rejectsUnknownToolName() throws Exception {
         respondWithContent(
-                "{\"action\":\"final\",\"rationale\":\"Unregistered\",\"toolName\":\"drop_table\",\"arguments\":{}}",
+                "{\"action\":\"final\",\"rationale\":\"尝试调用未注册工具\",\"toolName\":\"drop_table\",\"arguments\":{}}",
                 1,
                 1
         );
 
         assertThatThrownBy(() -> planner.plan("Delete data"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("Unknown tool: drop_table");
+                .hasMessage("未知工具：drop_table");
     }
 
     @Test
@@ -185,7 +185,37 @@ class OpenAiCompatiblePlannerTest {
 
         assertThatThrownBy(() -> planner.plan("Run a query"))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessage("Model planner returned invalid JSON");
+                .hasMessage("模型规划器返回了无效 JSON");
+    }
+
+    @Test
+    void asksModelToRewriteUserFacingEnglishAsSimplifiedChinese() throws Exception {
+        respondWithContent(
+                "{\"action\":\"clarify\",\"rationale\":\"Metric is ambiguous\","
+                        + "\"question\":\"Which metric do you want?\",\"options\":["
+                        + "{\"label\":\"Order count\",\"resolvedInput\":\"Count orders\"},"
+                        + "{\"label\":\"Order amount\",\"resolvedInput\":\"Sum order amount\"}]}",
+                10,
+                6
+        );
+        respondWithContent(
+                "{\"action\":\"clarify\",\"rationale\":\"指标存在歧义\","
+                        + "\"question\":\"你想分析哪个订单指标？\",\"options\":["
+                        + "{\"label\":\"订单数量\",\"resolvedInput\":\"统计订单数量\"},"
+                        + "{\"label\":\"订单金额\",\"resolvedInput\":\"汇总订单金额\"}]}",
+                15,
+                8
+        );
+
+        var plan = planner.plan("帮我看看订单情况");
+
+        assertThat(plan.clarification().question()).isEqualTo("你想分析哪个订单指标？");
+        assertThat(plan.clarification().options()).extracting("label")
+                .containsExactly("订单数量", "订单金额");
+        assertThat(plan.usage().inputTokens()).isEqualTo(25);
+        assertThat(plan.usage().outputTokens()).isEqualTo(14);
+        JsonNode sent = objectMapper.readTree(requestBody.get());
+        assertThat(sent.path("messages").toString()).contains("改写为简体中文");
     }
 
     private void respondWithContent(String content, int promptTokens, int completionTokens) throws Exception {

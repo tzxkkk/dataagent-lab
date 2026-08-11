@@ -22,7 +22,7 @@ public class MetadataSearchTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Search table names and descriptions in the data catalog";
+        return "在数据目录中搜索表名和表说明";
     }
 
     @Override
@@ -48,6 +48,6 @@ public class MetadataSearchTool implements AgentTool {
                         + "ORDER BY table_name LIMIT 10",
                 pattern, pattern, pattern
         );
-        return ToolResult.success("Found " + rows.size() + " catalog entries", Map.of("rows", rows));
+        return ToolResult.success("找到 " + rows.size() + " 条目录记录", Map.of("rows", rows));
     }
 }

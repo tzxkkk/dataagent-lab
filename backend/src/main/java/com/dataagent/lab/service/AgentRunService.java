@@ -115,7 +115,7 @@ public class AgentRunService {
             long startedAt = System.nanoTime();
             run.setEffectiveInput(resolvedInput.trim());
             run.setClarification(null);
-            event(run, "CLARIFICATION_RESOLVED", "User selected a concrete analysis goal",
+            event(run, "CLARIFICATION_RESOLVED", "用户已选择明确的分析目标",
                     Map.of("effectiveInput", run.getEffectiveInput()));
             try {
                 plan(run, true);
@@ -138,11 +138,11 @@ public class AgentRunService {
                 plan = runRepository.findPendingPlan(id).orElse(null);
             }
             if (plan == null) {
-                throw new IllegalStateException("Pending plan is missing for run: " + id);
+                throw new IllegalStateException("找不到该请求的待审批计划：" + id);
             }
             runRepository.deletePendingPlan(id);
             long startedAt = System.nanoTime();
-            event(run, "APPROVAL_RECEIVED", "User approved the plan", Map.of());
+            event(run, "APPROVAL_RECEIVED", "用户已确认执行计划", Map.of());
             try {
                 execute(run, plan);
             } catch (RuntimeException exception) {
@@ -159,7 +159,7 @@ public class AgentRunService {
         AgentRun previous = require(id);
         validateInput(input);
         synchronized (previous) {
-            event(previous, "REVISION_REQUESTED", "User changed the analysis request",
+            event(previous, "REVISION_REQUESTED", "用户已修改分析请求",
                     Map.of("revisedInput", input.trim()));
         }
         return preview(input, previous.getPlannerMode(), previous.getId());
@@ -169,10 +169,10 @@ public class AgentRunService {
         AgentRun run = require(id);
         String normalizedRating = rating == null ? "" : rating.trim().toUpperCase();
         if (!Set.of("UP", "DOWN").contains(normalizedRating)) {
-            throw new IllegalArgumentException("Rating must be UP or DOWN");
+            throw new IllegalArgumentException("反馈类型必须是 UP 或 DOWN");
         }
         if (run.getStatus() != RunStatus.SUCCEEDED && run.getStatus() != RunStatus.FAILED) {
-            throw new IllegalArgumentException("Feedback can only be recorded for a completed run");
+            throw new IllegalArgumentException("只能为已经结束的请求记录反馈");
         }
         synchronized (run) {
             RunFeedback feedback = new RunFeedback(
@@ -182,7 +182,7 @@ public class AgentRunService {
                     Instant.now()
             );
             run.setFeedback(feedback);
-            event(run, "FEEDBACK_RECORDED", "User feedback recorded",
+            event(run, "FEEDBACK_RECORDED", "已记录用户反馈",
                     Map.of("rating", feedback.rating(), "reason", feedback.reason() == null ? "" : feedback.reason()));
             return run;
         }
@@ -190,7 +190,7 @@ public class AgentRunService {
 
     public AgentRun require(String id) {
         return runs.computeIfAbsent(id, runId -> runRepository.findById(runId)
-                .orElseThrow(() -> new IllegalArgumentException("Run not found: " + runId)));
+                .orElseThrow(() -> new IllegalArgumentException("找不到请求：" + runId)));
     }
 
     private AgentRun createRun(String input, String plannerMode, String parentRunId) {
@@ -200,7 +200,7 @@ public class AgentRunService {
         run.setPlannerMode(descriptor.mode());
         run.setPlannerUsage(new PlannerUsage(descriptor.promptVersion(), descriptor.model(), 0, 0));
         runs.put(run.getId(), run);
-        event(run, "RUN_CREATED", "Run accepted", Map.of(
+        event(run, "RUN_CREATED", "已接收分析请求", Map.of(
                 "mode", descriptor.mode(),
                 "promptVersion", descriptor.promptVersion(),
                 "model", descriptor.model(),
@@ -212,10 +212,10 @@ public class AgentRunService {
     private AgentPlan plan(AgentRun run, boolean waitForApproval) {
         AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
         run.setStatus(RunStatus.PLANNING);
-        event(run, "PLANNING_STARTED", "Planner is selecting tools", Map.of());
+        event(run, "PLANNING_STARTED", "规划器正在选择工具", Map.of());
         AgentPlan plan = planner.plan(run.getEffectiveInput(), step -> tracePlanningStep(run, step));
         if (plan == null || plan.usage() == null) {
-            throw new IllegalStateException("Planner must return usage metadata");
+            throw new IllegalStateException("规划器必须返回用量信息");
         }
         run.setPlannerUsage(plan.usage());
         if (plan.requiresClarification()) {
@@ -241,7 +241,7 @@ public class AgentRunService {
             pendingPlans.put(run.getId(), plan);
             runRepository.savePendingPlan(run.getId(), plan);
             run.setStatus(RunStatus.WAITING_FOR_APPROVAL);
-            event(run, "PLAN_REVIEW_REQUIRED", "Waiting for user approval before tool execution", Map.of(
+            event(run, "PLAN_REVIEW_REQUIRED", "等待用户确认后执行工具", Map.of(
                     "riskLevel", run.getPlanPreview().riskLevel(),
                     "rowLimit", run.getPlanPreview().rowLimit()
             ));
@@ -255,7 +255,7 @@ public class AgentRunService {
         for (ToolInvocation invocation : plan.invocations()) {
             AgentTool tool = toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
             run.addExecutedTool(tool.name());
-            event(run, "TOOL_STARTED", "Executing " + tool.name(),
+            event(run, "TOOL_STARTED", "正在执行工具 " + tool.name(),
                     Map.of("tool", tool.name(), "arguments", invocation.arguments()));
             lastResult = tool.execute(invocation.arguments());
             if (!lastResult.success()) {
@@ -268,7 +268,7 @@ public class AgentRunService {
         run.setOutput(render(lastResult));
         run.setEvidence(evidence(run, lastResult));
         run.setStatus(RunStatus.SUCCEEDED);
-        event(run, "RUN_SUCCEEDED", "Run completed", Map.of(
+        event(run, "RUN_SUCCEEDED", "分析请求执行完成", Map.of(
                 "rowCount", run.getEvidence().rowCount(),
                 "sourceTables", run.getEvidence().sourceTables()
         ));
@@ -307,14 +307,14 @@ public class AgentRunService {
     private void requireStatus(AgentRun run, RunStatus expected) {
         if (run.getStatus() != expected) {
             throw new IllegalArgumentException(
-                    "Run " + run.getId() + " is " + run.getStatus() + ", expected " + expected
+                    "请求 " + run.getId() + " 当前状态为 " + run.getStatus() + "，预期状态为 " + expected
             );
         }
     }
 
     private void validateInput(String input) {
         if (input == null || input.isBlank()) {
-            throw new IllegalArgumentException("Input is required");
+            throw new IllegalArgumentException("分析问题不能为空");
         }
     }
 
@@ -324,21 +324,21 @@ public class AgentRunService {
 
     private String render(ToolResult result) {
         if (result == null) {
-            return "No tool result";
+            return "没有工具结果";
         }
         try {
             return result.summary() + "\n" + objectMapper.writeValueAsString(result.data());
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize tool result", exception);
+            throw new IllegalStateException("无法序列化工具结果", exception);
         }
     }
 
     private void validatePlan(AgentPlan plan) {
         if (plan == null || plan.invocations() == null || plan.invocations().size() != 1) {
-            throw new IllegalStateException("Planner must return exactly one tool invocation");
+            throw new IllegalStateException("规划器必须返回且只能返回一次工具调用");
         }
         if (plan.usage() == null) {
-            throw new IllegalStateException("Planner usage metadata is required");
+            throw new IllegalStateException("规划器用量信息不能为空");
         }
         ToolInvocation invocation = plan.invocations().get(0);
         toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());

@@ -35,19 +35,19 @@ public class OfflinePlanner implements AgentPlanner {
                 arguments.put("startMonth", months.get(0));
                 arguments.put("endMonth", months.size() == 1 ? months.get(0) : months.get(1));
             }
-            return plan("Resolve a logical dataset to maintained physical tables",
+            return plan("将逻辑数据集解析为已维护的物理表",
                     "resolve_dataset_tables", arguments);
         }
 
         if (containsAny(normalized, "逻辑数据集", "主题域", "logical dataset", "datasets")) {
-            return plan("Search the business-oriented logical data catalog",
+            return plan("搜索面向业务的逻辑数据目录",
                     "search_datasets", Map.of("query", datasetQuery(normalized, input)));
         }
 
         if (containsAny(normalized, "表结构", "结构", "字段", "schema", "column")) {
             String tableName = containsAny(normalized, "用户", "dim_user", "user")
                     ? "dim_user" : "fact_order";
-            return plan("Inspect the requested table schema", "get_table_schema",
+            return plan("查看指定数据表的结构", "get_table_schema",
                     Map.of("tableName", tableName));
         }
 
@@ -58,7 +58,7 @@ public class OfflinePlanner implements AgentPlanner {
                     + "FROM fact_order o JOIN dim_user u ON u.user_id = o.user_id "
                     + "WHERE o.status = 'COMPLETED' GROUP BY u.city "
                     + "ORDER BY total_amount DESC LIMIT 1";
-            return sqlPlan("Find the city with the highest completed order amount", sql);
+            return sqlPlan("查询已完成订单金额最高的城市", sql);
         }
 
         if (containsAny(normalized, "武汉", "wuhan")
@@ -66,7 +66,7 @@ public class OfflinePlanner implements AgentPlanner {
             String sql = "SELECT SUM(o.order_amount) AS total_amount "
                     + "FROM fact_order o JOIN dim_user u ON u.user_id = o.user_id "
                     + "WHERE o.status = 'COMPLETED' AND u.city = '武汉'";
-            return sqlPlan("Aggregate completed order amount for Wuhan", sql);
+            return sqlPlan("汇总武汉的已完成订单金额", sql);
         }
 
         if (containsAny(normalized, "城市", "city")
@@ -74,13 +74,13 @@ public class OfflinePlanner implements AgentPlanner {
             String sql = "SELECT u.city, COUNT(*) AS completed_count "
                     + "FROM fact_order o JOIN dim_user u ON u.user_id = o.user_id "
                     + "WHERE o.status = 'COMPLETED' GROUP BY u.city ORDER BY u.city";
-            return sqlPlan("Count completed orders by city", sql);
+            return sqlPlan("按城市统计已完成订单数量", sql);
         }
 
         if (containsAny(normalized, "城市", "city")
                 && containsAny(normalized, "用户数", "用户数量", "users per city")) {
             String sql = "SELECT city, COUNT(*) AS user_count FROM dim_user GROUP BY city ORDER BY city";
-            return sqlPlan("Count users by city", sql);
+            return sqlPlan("按城市统计用户数量", sql);
         }
 
         if (containsAny(normalized, "城市", "city")
@@ -88,78 +88,78 @@ public class OfflinePlanner implements AgentPlanner {
             String sql = "SELECT u.city, SUM(o.order_amount) AS total_amount "
                     + "FROM fact_order o JOIN dim_user u ON u.user_id = o.user_id "
                     + "WHERE o.status = 'COMPLETED' GROUP BY u.city ORDER BY total_amount DESC";
-            return sqlPlan("Aggregate completed order amount by city", sql);
+            return sqlPlan("按城市汇总已完成订单金额", sql);
         }
 
         if (containsAny(normalized, "按状态", "各状态", "by status")) {
             String sql = "SELECT status, COUNT(*) AS order_count "
                     + "FROM fact_order GROUP BY status ORDER BY status";
-            return sqlPlan("Count orders by status", sql);
+            return sqlPlan("按状态统计订单数量", sql);
         }
 
         if (normalized.contains("101") && containsAny(normalized, "状态", "status")) {
             String sql = "SELECT order_id, status FROM fact_order WHERE order_id = 101";
-            return sqlPlan("Find the status of order 101", sql);
+            return sqlPlan("查询订单 101 的状态", sql);
         }
 
         if (containsAny(normalized, "大于100", ">100", "above 100", "greater than 100")) {
             String sql = "SELECT COUNT(*) AS high_value_count FROM fact_order "
                     + "WHERE status = 'COMPLETED' AND order_amount > 100";
-            return sqlPlan("Count high-value completed orders", sql);
+            return sqlPlan("统计高金额已完成订单数量", sql);
         }
 
         if (containsAny(normalized, "待处理", "pending")
                 && containsAny(normalized, "金额", "amount")) {
             String sql = "SELECT SUM(order_amount) AS pending_amount "
                     + "FROM fact_order WHERE status = 'PENDING'";
-            return sqlPlan("Aggregate pending order amount", sql);
+            return sqlPlan("汇总待处理订单金额", sql);
         }
 
         if (containsAny(normalized, "最高金额", "最大金额", "maximum", "highest amount")) {
             String sql = "SELECT MAX(order_amount) AS maximum_amount "
                     + "FROM fact_order WHERE status = 'COMPLETED'";
-            return sqlPlan("Find the maximum completed order amount", sql);
+            return sqlPlan("查询已完成订单的最高金额", sql);
         }
 
         if (containsAny(normalized, "最低金额", "最小金额", "minimum", "lowest amount")) {
             String sql = "SELECT MIN(order_amount) AS minimum_amount "
                     + "FROM fact_order WHERE status = 'COMPLETED'";
-            return sqlPlan("Find the minimum completed order amount", sql);
+            return sqlPlan("查询已完成订单的最低金额", sql);
         }
 
         if (containsAny(normalized, "平均", "均值", "average")) {
             String sql = "SELECT AVG(order_amount) AS average_amount "
                     + "FROM fact_order WHERE status = 'COMPLETED'";
-            return sqlPlan("Calculate the average completed order amount", sql);
+            return sqlPlan("计算已完成订单的平均金额", sql);
         }
 
         if (containsAny(normalized, "总金额", "金额合计", "total amount")
                 && containsAny(normalized, "完成", "completed")) {
             String sql = "SELECT SUM(order_amount) AS total_amount "
                     + "FROM fact_order WHERE status = 'COMPLETED'";
-            return sqlPlan("Aggregate total completed order amount", sql);
+            return sqlPlan("汇总已完成订单总金额", sql);
         }
 
         if (containsAny(normalized, "待处理", "pending")
                 && containsAny(normalized, "数量", "订单数", "count")) {
             String sql = "SELECT COUNT(*) AS pending_count FROM fact_order WHERE status = 'PENDING'";
-            return sqlPlan("Count pending orders", sql);
+            return sqlPlan("统计待处理订单数量", sql);
         }
 
         if (containsAny(normalized, "已取消", "取消", "cancelled")
                 && containsAny(normalized, "数量", "订单数", "count")) {
             String sql = "SELECT COUNT(*) AS cancelled_count FROM fact_order WHERE status = 'CANCELLED'";
-            return sqlPlan("Count cancelled orders", sql);
+            return sqlPlan("统计已取消订单数量", sql);
         }
 
         if (containsAny(normalized, "全部订单", "订单总数", "all orders")) {
             String sql = "SELECT COUNT(*) AS order_count FROM fact_order";
-            return sqlPlan("Count all orders", sql);
+            return sqlPlan("统计全部订单数量", sql);
         }
 
         if (containsAny(normalized, "完成订单", "已完成订单", "completed")) {
             String sql = "SELECT COUNT(*) AS completed_count FROM fact_order WHERE status = 'COMPLETED'";
-            return sqlPlan("Count completed orders", sql);
+            return sqlPlan("统计已完成订单数量", sql);
         }
 
         String query;
@@ -172,7 +172,7 @@ public class OfflinePlanner implements AgentPlanner {
         } else {
             query = input;
         }
-        return plan("Search metadata before operating on data", "search_metadata", Map.of("query", query));
+        return plan("在操作数据前搜索元数据", "search_metadata", Map.of("query", query));
     }
 
     private AgentPlan sqlPlan(String rationale, String sql) {

@@ -33,7 +33,7 @@ function isAmbiguous(input: string) {
 function createPlan(input: string): PlanPreview {
   if (input.includes('结构') || input.includes('字段')) {
     return {
-      interpretation: 'Inspect the requested table schema',
+      interpretation: '查看指定数据表的结构',
       toolName: 'get_table_schema',
       arguments: { tableName: 'fact_order' },
       sourceTables: ['fact_order'],
@@ -46,7 +46,7 @@ function createPlan(input: string): PlanPreview {
   }
   if (input.includes('搜索') || input.includes('有哪些')) {
     return {
-      interpretation: 'Search metadata before operating on data',
+      interpretation: '在操作数据前搜索元数据',
       toolName: 'search_metadata',
       arguments: { query: '订单' },
       sourceTables: ['metadata_catalog'],
@@ -70,12 +70,12 @@ function createPlan(input: string): PlanPreview {
         : "SELECT COUNT(*) AS completed_count FROM fact_order WHERE status = 'COMPLETED'"
   return {
     interpretation: cityAmount
-      ? 'Aggregate completed order amount by city'
+      ? '按城市汇总已完成订单金额'
       : statusCount
-        ? 'Count orders by status'
+        ? '按状态统计订单数量'
         : average
-          ? 'Calculate the average completed order amount'
-          : 'Count completed orders',
+          ? '计算已完成订单的平均金额'
+          : '统计已完成订单数量',
     toolName: 'run_readonly_sql',
     arguments: { sql },
     sourceTables: cityAmount ? ['fact_order', 'dim_user'] : ['fact_order'],
@@ -100,13 +100,13 @@ function evidenceFor(plan: PlanPreview): RunEvidence {
       { COLUMN_NAME: 'STATUS', DATA_TYPE: 'VARCHAR', IS_NULLABLE: 'NO' },
       { COLUMN_NAME: 'CREATED_AT', DATA_TYPE: 'TIMESTAMP', IS_NULLABLE: 'NO' },
     ]
-    return { summary: 'Loaded 5 columns for fact_order', sourceTables: plan.sourceTables, filters: [], sql: null, rowCount: 5, resultData: { columns } }
+    return { summary: '已读取 fact_order 的 5 个字段', sourceTables: plan.sourceTables, filters: [], sql: null, rowCount: 5, resultData: { columns } }
   }
   if (plan.toolName === 'search_metadata') {
     const rows = [
       { TABLE_NAME: 'fact_order', DISPLAY_NAME: '订单事实表', DESCRIPTION: '记录订单金额、状态和创建时间' },
     ]
-    return { summary: 'Found 1 catalog entry', sourceTables: plan.sourceTables, filters: [], sql: null, rowCount: 1, resultData: { rows } }
+    return { summary: '找到 1 条目录记录', sourceTables: plan.sourceTables, filters: [], sql: null, rowCount: 1, resultData: { rows } }
   }
 
   let rows: Record<string, unknown>[] = [{ COMPLETED_COUNT: 4 }]
@@ -118,7 +118,7 @@ function evidenceFor(plan: PlanPreview): RunEvidence {
   ]
   if (plan.interpretation.includes('average')) rows = [{ AVERAGE_AMOUNT: 107.5 }]
   return {
-    summary: `Query returned ${rows.length} rows`,
+    summary: `查询返回 ${rows.length} 行`,
     sourceTables: plan.sourceTables,
     filters: plan.filters,
     sql: `${plan.sql} LIMIT 200`,
@@ -158,10 +158,10 @@ export async function mockPlanners(): Promise<PlannerDescriptor[]> {
 }
 
 export async function mockPreviewRun(input: string, plannerMode: string, parentRunId: string | null): Promise<AgentRun> {
-  if (plannerMode !== 'offline') throw new Error(`Planner mode is not configured: ${plannerMode}`)
+  if (plannerMode !== 'offline') throw new Error(`规划模式尚未配置：${plannerMode}`)
   await delay(260)
   const run = baseRun(input, plannerMode, parentRunId)
-  addEvent(run, 'RUN_CREATED', 'Run accepted', { mode: plannerMode, parentRunId })
+  addEvent(run, 'RUN_CREATED', '已接收分析请求', { mode: plannerMode, parentRunId })
   if (isAmbiguous(input)) {
     run.status = 'WAITING_FOR_CLARIFICATION'
     run.clarification = {
@@ -177,9 +177,9 @@ export async function mockPreviewRun(input: string, plannerMode: string, parentR
   } else {
     run.planPreview = createPlan(input)
     run.status = 'WAITING_FOR_APPROVAL'
-    addEvent(run, 'PLANNING_STARTED', 'Planner is selecting tools')
+    addEvent(run, 'PLANNING_STARTED', '规划器正在选择工具')
     addEvent(run, 'PLAN_CREATED', run.planPreview.interpretation, { tools: [run.planPreview.toolName] })
-    addEvent(run, 'PLAN_REVIEW_REQUIRED', 'Waiting for user approval before tool execution')
+    addEvent(run, 'PLAN_REVIEW_REQUIRED', '等待用户确认后执行工具')
   }
   storedRuns.set(run.id, run)
   return run
@@ -188,22 +188,22 @@ export async function mockPreviewRun(input: string, plannerMode: string, parentR
 export async function mockClarifyRun(id: string, resolvedInput: string): Promise<AgentRun> {
   await delay(180)
   const run = storedRuns.get(id)
-  if (!run || run.status !== 'WAITING_FOR_CLARIFICATION') throw new Error('Run is not waiting for clarification')
+  if (!run || run.status !== 'WAITING_FOR_CLARIFICATION') throw new Error('当前请求不在等待澄清状态')
   run.effectiveInput = resolvedInput
-  addEvent(run, 'CLARIFICATION_RESOLVED', 'User selected a concrete analysis goal', { effectiveInput: resolvedInput })
+  addEvent(run, 'CLARIFICATION_RESOLVED', '用户已选择明确的分析目标', { effectiveInput: resolvedInput })
   run.planPreview = createPlan(resolvedInput)
   run.status = 'WAITING_FOR_APPROVAL'
-  addEvent(run, 'PLANNING_STARTED', 'Planner is selecting tools')
+  addEvent(run, 'PLANNING_STARTED', '规划器正在选择工具')
   addEvent(run, 'PLAN_CREATED', run.planPreview.interpretation, { tools: [run.planPreview.toolName] })
-  addEvent(run, 'PLAN_REVIEW_REQUIRED', 'Waiting for user approval before tool execution')
+  addEvent(run, 'PLAN_REVIEW_REQUIRED', '等待用户确认后执行工具')
   return run
 }
 
 export async function mockApproveRun(id: string): Promise<AgentRun> {
   await delay(360)
   const run = storedRuns.get(id)
-  if (!run || run.status !== 'WAITING_FOR_APPROVAL' || !run.planPreview) throw new Error('Run is not waiting for approval')
-  addEvent(run, 'APPROVAL_RECEIVED', 'User approved the plan')
+  if (!run || run.status !== 'WAITING_FOR_APPROVAL' || !run.planPreview) throw new Error('当前请求不在等待确认状态')
+  addEvent(run, 'APPROVAL_RECEIVED', '用户已确认执行计划')
   run.status = 'RUNNING'
   addEvent(run, 'TOOL_STARTED', `Executing ${run.planPreview.toolName}`, { arguments: run.planPreview.arguments })
   run.evidence = evidenceFor(run.planPreview)
@@ -212,14 +212,14 @@ export async function mockApproveRun(id: string): Promise<AgentRun> {
   run.durationMs = 38
   addEvent(run, 'TOOL_SUCCEEDED', run.evidence.summary, { result: run.evidence.resultData })
   run.status = 'SUCCEEDED'
-  addEvent(run, 'RUN_SUCCEEDED', 'Run completed', { rowCount: run.evidence.rowCount })
+  addEvent(run, 'RUN_SUCCEEDED', '分析请求执行完成', { rowCount: run.evidence.rowCount })
   return run
 }
 
 export async function mockReviseRun(id: string, input: string): Promise<AgentRun> {
   const previous = storedRuns.get(id)
-  if (!previous) throw new Error('Run not found')
-  addEvent(previous, 'REVISION_REQUESTED', 'User changed the analysis request', { revisedInput: input })
+  if (!previous) throw new Error('找不到请求')
+  addEvent(previous, 'REVISION_REQUESTED', '用户已修改分析请求', { revisedInput: input })
   return mockPreviewRun(input, previous.plannerMode, previous.id)
 }
 
@@ -231,9 +231,9 @@ export async function mockFeedback(
 ): Promise<AgentRun> {
   await delay(100)
   const run = storedRuns.get(id)
-  if (!run || !['SUCCEEDED', 'FAILED'].includes(run.status)) throw new Error('Run is not completed')
+  if (!run || !['SUCCEEDED', 'FAILED'].includes(run.status)) throw new Error('请求尚未结束')
   run.feedback = { rating, reason, comment, submittedAt: new Date().toISOString() }
-  addEvent(run, 'FEEDBACK_RECORDED', 'User feedback recorded', { rating, reason })
+  addEvent(run, 'FEEDBACK_RECORDED', '已记录用户反馈', { rating, reason })
   return run
 }
 
@@ -243,7 +243,7 @@ export async function mockRun(input: string, plannerMode: string): Promise<Agent
 }
 
 export async function mockEvaluate(plannerMode: string): Promise<EvaluationReport> {
-  if (plannerMode !== 'offline') throw new Error(`Planner mode is not configured: ${plannerMode}`)
+  if (plannerMode !== 'offline') throw new Error(`规划模式尚未配置：${plannerMode}`)
   await delay(700)
   const definitions = [
     ['metadata-order-cn', 'metadata', 'search_metadata'], ['metadata-user-cn', 'metadata', 'search_metadata'],

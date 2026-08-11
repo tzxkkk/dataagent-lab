@@ -23,7 +23,7 @@ public class TableSchemaTool implements AgentTool {
 
     @Override
     public String description() {
-        return "Inspect columns and types for an allow-listed warehouse table";
+        return "查看白名单数据表的字段和类型";
     }
 
     @Override
@@ -45,7 +45,7 @@ public class TableSchemaTool implements AgentTool {
                 .trim()
                 .toLowerCase(Locale.ROOT);
         if (!tableName.matches("[a-z0-9_]+")) {
-            return ToolResult.failure("Invalid table name");
+            return ToolResult.failure("表名格式不合法");
         }
 
         Integer catalogMatches = jdbcTemplate.queryForObject(
@@ -54,7 +54,7 @@ public class TableSchemaTool implements AgentTool {
                 tableName
         );
         if (catalogMatches == null || catalogMatches == 0) {
-            return ToolResult.failure("Table is not in the metadata catalog: " + tableName);
+            return ToolResult.failure("数据目录中不存在该表：" + tableName);
         }
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -65,9 +65,9 @@ public class TableSchemaTool implements AgentTool {
                 tableName
         );
         if (rows.isEmpty()) {
-            return ToolResult.failure("Table not found: " + tableName);
+            return ToolResult.failure("找不到数据表：" + tableName);
         }
-        return ToolResult.success("Loaded " + rows.size() + " columns for " + tableName,
+        return ToolResult.success("已读取 " + tableName + " 的 " + rows.size() + " 个字段",
                 Map.of("tableName", tableName, "columns", rows));
     }
 }

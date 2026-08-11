@@ -15,7 +15,7 @@ public class ToolRegistry {
         Map<String, AgentTool> registered = new LinkedHashMap<>();
         for (AgentTool tool : tools) {
             if (registered.put(tool.name(), tool) != null) {
-                throw new IllegalStateException("Duplicate tool name: " + tool.name());
+                throw new IllegalStateException("工具名称重复：" + tool.name());
             }
         }
         this.tools = Map.copyOf(registered);
@@ -24,7 +24,7 @@ public class ToolRegistry {
     public AgentTool require(String name) {
         AgentTool tool = tools.get(name);
         if (tool == null) {
-            throw new IllegalArgumentException("Unknown tool: " + name);
+            throw new IllegalArgumentException("未知工具：" + name);
         }
         return tool;
     }
@@ -35,7 +35,7 @@ public class ToolRegistry {
         validateArguments(tool, normalizedArguments);
         String rejection = tool.validate(normalizedArguments);
         if (rejection != null) {
-            throw new IllegalArgumentException("Arguments rejected by " + tool.name() + ": " + rejection);
+            throw new IllegalArgumentException("工具 " + tool.name() + " 拒绝了参数：" + rejection);
         }
         return tool;
     }
@@ -55,7 +55,7 @@ public class ToolRegistry {
                     .sorted()
                     .toList();
             if (!unknown.isEmpty()) {
-                throw new IllegalArgumentException("Unknown arguments for " + tool.name() + ": " + unknown);
+                throw new IllegalArgumentException("工具 " + tool.name() + " 收到未知参数：" + unknown);
             }
         }
 
@@ -63,7 +63,7 @@ public class ToolRegistry {
             for (Object field : requiredFields) {
                 String name = String.valueOf(field);
                 if (!arguments.containsKey(name) || arguments.get(name) == null) {
-                    throw new IllegalArgumentException("Missing required argument for " + tool.name() + ": " + name);
+                    throw new IllegalArgumentException("工具 " + tool.name() + " 缺少必填参数：" + name);
                 }
             }
         }
@@ -74,14 +74,14 @@ public class ToolRegistry {
             }
             Object expectedType = propertySchema.get("type");
             if ("string".equals(expectedType) && !(entry.getValue() instanceof String)) {
-                throw new IllegalArgumentException("Argument " + entry.getKey() + " for " + tool.name()
-                        + " must be a string");
+                throw new IllegalArgumentException("工具 " + tool.name() + " 的参数 " + entry.getKey()
+                        + " 必须是字符串");
             }
             Object pattern = propertySchema.get("pattern");
             if (pattern != null && entry.getValue() instanceof String stringValue
                     && !Pattern.matches(String.valueOf(pattern), stringValue)) {
-                throw new IllegalArgumentException("Argument " + entry.getKey() + " for " + tool.name()
-                        + " does not match " + pattern);
+                throw new IllegalArgumentException("工具 " + tool.name() + " 的参数 " + entry.getKey()
+                        + " 不符合格式 " + pattern);
             }
         }
     }

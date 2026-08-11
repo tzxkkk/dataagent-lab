@@ -88,13 +88,13 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
     @Override
     public AgentPlan plan(String input, Consumer<PlanningToolStep> planningObserver) {
         if (!enabled) {
-            throw new IllegalStateException("Model planner is disabled");
+            throw new IllegalStateException("模型规划器已禁用");
         }
         if (apiKey.isBlank()) {
-            throw new IllegalStateException("Model planner API key is not configured");
+            throw new IllegalStateException("尚未配置模型规划器 API Key");
         }
         if (model.isBlank()) {
-            throw new IllegalStateException("Model planner model is required");
+            throw new IllegalStateException("必须配置模型规划器使用的模型");
         }
 
         List<Map<String, Object>> messages = new ArrayList<>();
@@ -115,6 +115,20 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             String action = normalize(output.action());
             String rationale = rationale(output.rationale());
 
+            if (("clarify".equals(action) || "final".equals(action))
+                    && !usesSimplifiedChinese(action, output, rationale)) {
+                if (attempt == maxPlanningSteps) {
+                    throw new IllegalStateException("模型面向用户的内容没有使用简体中文");
+                }
+                messages.add(Map.of("role", "assistant", "content", turn.content()));
+                messages.add(Map.of(
+                        "role", "user",
+                        "content", "请保持相同 action 和技术参数不变，将 rationale、question、option label、"
+                                + "resolvedInput 等所有面向用户的自然语言字段改写为简体中文，然后只返回 JSON。"
+                ));
+                continue;
+            }
+
             if ("clarify".equals(action)) {
                 ClarificationPrompt clarification = clarification(output);
                 return new AgentPlan(
@@ -127,7 +141,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             }
 
             if (output.toolName() == null || output.toolName().isBlank()) {
-                throw new IllegalStateException("Model planner did not select a tool");
+                throw new IllegalStateException("模型规划器没有选择工具");
             }
             AgentTool registeredTool = toolRegistry.require(output.toolName());
             Map<String, Object> arguments = output.arguments() == null ? Map.of() : output.arguments();
@@ -147,7 +161,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
                     if (attempt == maxPlanningSteps) {
                         throw exception;
                     }
-                    ToolResult rejection = ToolResult.failure("Final tool rejected before preview: "
+                    ToolResult rejection = ToolResult.failure("最终工具在预览前被拒绝："
                             + exception.getMessage());
                     recordStep(planningSteps, planningObserver, new PlanningToolStep(invocation, rejection));
                     appendToolResult(messages, turn.content(), invocation, rejection);
@@ -156,16 +170,16 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             }
 
             if (!"inspect".equals(action)) {
-                throw new IllegalStateException("Model planner returned unsupported action: " + output.action());
+                throw new IllegalStateException("模型规划器返回了不支持的操作：" + output.action());
             }
             if (attempt == maxPlanningSteps) {
-                throw new IllegalStateException("Model planner exceeded " + maxPlanningSteps + " inspection steps");
+                throw new IllegalStateException("模型规划器超过了 " + maxPlanningSteps + " 个检查步骤");
             }
 
             if (!INSPECTION_TOOLS.contains(invocation.toolName())) {
                 ToolResult rejection = ToolResult.failure(
-                        "Tool cannot run during planning: " + invocation.toolName()
-                                + ". Submit it with action=final so the backend can request user approval."
+                        "该工具不能在规划阶段运行：" + invocation.toolName()
+                                + "。请使用 action=final 提交，以便后端请求用户确认。"
                 );
                 recordStep(planningSteps, planningObserver, new PlanningToolStep(invocation, rejection));
                 appendToolResult(messages, turn.content(), invocation, rejection);
@@ -177,13 +191,13 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
                 AgentTool tool = toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
                 result = tool.execute(invocation.arguments());
             } catch (IllegalArgumentException exception) {
-                result = ToolResult.failure("Tool arguments rejected: " + exception.getMessage());
+                result = ToolResult.failure("工具参数被拒绝：" + exception.getMessage());
             }
             recordStep(planningSteps, planningObserver, new PlanningToolStep(invocation, result));
             appendToolResult(messages, turn.content(), invocation, result);
         }
 
-        throw new IllegalStateException("Model planner did not produce a final action");
+        throw new IllegalStateException("模型规划器没有生成最终操作");
     }
 
     @Override
@@ -213,19 +227,19 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
                     .build();
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize model planner request", exception);
+            throw new IllegalStateException("无法序列化模型规划请求", exception);
         }
 
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("Model planner request failed with HTTP " + response.statusCode());
+                throw new IllegalStateException("模型规划请求失败，HTTP 状态码：" + response.statusCode());
             }
             ChatResponse chatResponse = objectMapper.readValue(response.body(), ChatResponse.class);
             if (chatResponse.choices() == null || chatResponse.choices().isEmpty()
                     || chatResponse.choices().get(0).message() == null
                     || chatResponse.choices().get(0).message().content() == null) {
-                throw new IllegalStateException("Model planner response did not contain message content");
+                throw new IllegalStateException("模型规划响应中没有消息内容");
             }
             Usage usage = chatResponse.usage();
             return new ModelTurn(
@@ -236,9 +250,10 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             );
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("Model planner request was interrupted", exception);
+            throw new IllegalStateException("模型规划请求被中断", exception);
         } catch (IOException exception) {
-            throw new IllegalStateException("Model planner request failed: " + exception.getMessage(), exception);
+            String detail = exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+            throw new IllegalStateException("模型规划请求失败：" + detail, exception);
         }
     }
 
@@ -246,22 +261,22 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
         try {
             return objectMapper.readValue(content, PlannerOutput.class);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Model planner returned invalid JSON", exception);
+            throw new IllegalStateException("模型规划器返回了无效 JSON", exception);
         }
     }
 
     private ClarificationPrompt clarification(PlannerOutput output) {
         if (output.question() == null || output.question().isBlank()) {
-            throw new IllegalStateException("Model clarification question is required");
+            throw new IllegalStateException("模型必须提供澄清问题");
         }
         List<ClarificationOption> options = output.options() == null ? List.of() : output.options();
         if (options.size() < 2 || options.size() > 5) {
-            throw new IllegalStateException("Model clarification must provide between 2 and 5 options");
+            throw new IllegalStateException("模型澄清必须提供 2 到 5 个选项");
         }
         for (ClarificationOption option : options) {
             if (option == null || option.label() == null || option.label().isBlank()
                     || option.resolvedInput() == null || option.resolvedInput().isBlank()) {
-                throw new IllegalStateException("Model clarification options must contain label and resolvedInput");
+                throw new IllegalStateException("模型澄清选项必须包含 label 和 resolvedInput");
             }
         }
         return new ClarificationPrompt(output.question().trim(), List.copyOf(options));
@@ -286,7 +301,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
                     "content", "Backend inspection tool result. Continue planning from this evidence:\n" + toolResult
             ));
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize planning tool result", exception);
+            throw new IllegalStateException("无法序列化规划工具结果", exception);
         }
     }
 
@@ -308,7 +323,28 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
     }
 
     private String rationale(String value) {
-        return value == null || value.isBlank() ? "Model selected a grounded backend action" : value.trim();
+        return value == null || value.isBlank() ? "模型已选择有数据依据的后端操作" : value.trim();
+    }
+
+    private boolean usesSimplifiedChinese(String action, PlannerOutput output, String rationale) {
+        if (!containsHanCharacter(rationale)) {
+            return false;
+        }
+        if (!"clarify".equals(action)) {
+            return true;
+        }
+        if (!containsHanCharacter(output.question())) {
+            return false;
+        }
+        List<ClarificationOption> options = output.options() == null ? List.of() : output.options();
+        return !options.isEmpty() && options.stream().allMatch(option -> option != null
+                && containsHanCharacter(option.label())
+                && containsHanCharacter(option.resolvedInput()));
+    }
+
+    private boolean containsHanCharacter(String value) {
+        return value != null && value.codePoints()
+                .anyMatch(codePoint -> Character.UnicodeScript.of(codePoint) == Character.UnicodeScript.HAN);
     }
 
     private String resolveApiKey(String inlineApiKey, String apiKeyFile) {
@@ -326,7 +362,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
         try {
             return Files.readString(path).trim();
         } catch (IOException exception) {
-            throw new IllegalStateException("Could not read model planner API key file", exception);
+            throw new IllegalStateException("无法读取模型规划器 API Key 文件", exception);
         }
     }
 
@@ -342,7 +378,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
 
     private URI chatCompletionsEndpoint(String baseUrl) {
         if (baseUrl == null || baseUrl.isBlank()) {
-            throw new IllegalArgumentException("Model planner base URL is required");
+            throw new IllegalArgumentException("必须配置模型规划器 Base URL");
         }
         String normalized = baseUrl.trim().replaceAll("/+$", "");
         if (!normalized.endsWith("/chat/completions")) {

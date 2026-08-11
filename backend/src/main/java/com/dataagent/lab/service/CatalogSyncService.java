@@ -59,7 +59,7 @@ public class CatalogSyncService implements ApplicationRunner {
                             + "WHERE NOT EXISTS (SELECT 1 FROM metadata_catalog WHERE LOWER(table_name) = ?)",
                     tableName,
                     tableName,
-                    "Automatically discovered physical table: " + tableName,
+                    "启动时自动发现的物理表：" + tableName,
                     tableName
             );
         }

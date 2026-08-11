@@ -9,7 +9,7 @@ import java.util.List;
 
 @Component
 public class PlannerPromptCatalog {
-    public static final String VERSION = "data-planner-v2";
+    public static final String VERSION = "data-planner-v3";
 
     private final ObjectMapper objectMapper;
 
@@ -26,14 +26,17 @@ public class PlannerPromptCatalog {
 
                     Return one raw JSON object for exactly one of these actions:
                     1. Inspect facts before planning:
-                       {"action":"inspect","rationale":"short reason","toolName":"registered inspection tool","arguments":{}}
+                       {"action":"inspect","rationale":"查询相关数据集信息","toolName":"registered inspection tool","arguments":{}}
                     2. Submit the final tool call:
-                       {"action":"final","rationale":"short reason","toolName":"registered tool name","arguments":{}}
+                       {"action":"final","rationale":"按城市统计已完成订单金额","toolName":"registered tool name","arguments":{}}
                     3. Ask the user to resolve material ambiguity:
-                       {"action":"clarify","rationale":"short reason","question":"one concrete question",
-                        "options":[{"label":"short label","resolvedInput":"complete revised request"}]}
+                       {"action":"clarify","rationale":"缺少明确的分析指标","question":"你想从哪个角度分析订单？",
+                        "options":[{"label":"订单金额趋势","resolvedInput":"按月统计订单金额趋势"}]}
 
                     Rules:
+                    - All user-facing natural-language values MUST use Simplified Chinese, including rationale,
+                      question, option label, and resolvedInput. Keep JSON keys, tool names, table names,
+                      column names, SQL, and enum values unchanged.
                     - Ambiguity gate comes first. If the user asks to broadly look at, analyze, understand,
                       or summarize a dataset but does not specify a metric, field, grouping, filter, or time
                       scope, you MUST return clarify immediately and MUST NOT inspect tools first.
@@ -62,7 +65,7 @@ public class PlannerPromptCatalog {
                     Tool registry:
                     """ + objectMapper.writeValueAsString(tools);
         } catch (JsonProcessingException exception) {
-            throw new IllegalStateException("Could not serialize tool definitions", exception);
+            throw new IllegalStateException("无法序列化工具定义", exception);
         }
     }
 }

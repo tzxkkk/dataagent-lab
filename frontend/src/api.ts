@@ -31,7 +31,7 @@ async function readResponse<T>(response: Response, fallbackMessage: string): Pro
 export async function listPlanners(): Promise<PlannerDescriptor[]> {
   if (useMock) return mockPlanners()
   const response = await fetch('/api/planners')
-  return readResponse(response, 'Planner 列表加载失败')
+  return readResponse(response, '规划器列表加载失败')
 }
 
 export async function createRun(input: string, plannerMode: string): Promise<AgentRun> {

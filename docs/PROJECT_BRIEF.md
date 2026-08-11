@@ -72,9 +72,11 @@ The model planner can return a structured clarification question with two to
 five complete request options, so the interactive model path no longer relies
 on the order-specific clarification rules.
 
-The current OpenAI-compatible adapter uses Prompt version `data-planner-v2` and
+The current OpenAI-compatible adapter uses Prompt version `data-planner-v3` and
 records cumulative model input/output tokens across all planning turns. It can
 read a local API-key file without returning the secret through APIs or Trace.
+All user-facing model fields are constrained to Simplified Chinese while JSON
+keys, tool identifiers, schema names, SQL, and enum values remain unchanged.
 Its protocol is tested against a local HTTP server for clarification, inspection
 loops, final tool selection, unknown tools, and malformed JSON.
 
