@@ -11,5 +11,9 @@ public interface AgentTool {
 
     Map<String, Object> inputSchema();
 
+    default String validate(Map<String, Object> arguments) {
+        return null;
+    }
+
     ToolResult execute(Map<String, Object> arguments);
 }

@@ -18,6 +18,9 @@ class DatasetCatalogToolTest {
     private ResolveDatasetTablesTool resolveDatasetTablesTool;
 
     @Autowired
+    private DatasetContextTool datasetContextTool;
+
+    @Autowired
     private ToolRegistry toolRegistry;
 
     @Test
@@ -61,5 +64,21 @@ class DatasetCatalogToolTest {
         assertThat(incomplete.summary()).contains("provided together");
         assertThat(reversed.success()).isFalse();
         assertThat(reversed.summary()).contains("must not be after");
+    }
+
+    @Test
+    void loadsGroundedDatasetMappingsAndJoinRelationshipsForTheModel() {
+        var result = datasetContextTool.execute(Map.of(
+                "datasetId", "orders",
+                "startMonth", "2026-07",
+                "endMonth", "2026-08"
+        ));
+
+        assertThat(result.success()).isTrue();
+        assertThat((List<?>) result.data().get("physicalTables")).hasSize(2);
+        assertThat(result.data().toString())
+                .contains("fact_order_202607", "fact_order_202608")
+                .contains("orders.user_id = users.user_id")
+                .contains("COMPLETED=已完成", "订单应付金额");
     }
 }

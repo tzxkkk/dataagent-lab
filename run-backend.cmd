@@ -7,6 +7,21 @@ set "BUNDLED_JAVA=%WORK_ROOT%\tools\jdk17\zulu17.68.17-ca-jdk17.0.20-win_x64"
 set "BUNDLED_MAVEN=%WORK_ROOT%\tools\maven\apache-maven-3.9.11"
 set "USE_BUNDLED=0"
 
+if not defined AGENT_OPENAI_API_KEY_FILE if exist "%PROJECT_DIR%apikey.txt" (
+  set "AGENT_OPENAI_API_KEY_FILE=%PROJECT_DIR%apikey.txt"
+)
+if not defined AGENT_OPENAI_PROXY_URL if defined HTTPS_PROXY (
+  set "AGENT_OPENAI_PROXY_URL=%HTTPS_PROXY%"
+)
+if not defined AGENT_OPENAI_PROXY_URL (
+  where git >nul 2>&1
+  if not errorlevel 1 (
+    for /f "usebackq delims=" %%P in (`git config --global --get https.proxy 2^>nul`) do (
+      set "AGENT_OPENAI_PROXY_URL=%%P"
+    )
+  )
+)
+
 if exist "%BUNDLED_JAVA%\bin\java.exe" if exist "%BUNDLED_MAVEN%\bin\mvn.cmd" set "USE_BUNDLED=1"
 
 if "%USE_BUNDLED%"=="1" (

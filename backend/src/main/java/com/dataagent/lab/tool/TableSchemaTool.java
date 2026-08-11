@@ -60,7 +60,7 @@ public class TableSchemaTool implements AgentTool {
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 "SELECT UPPER(column_name) AS column_name, UPPER(data_type) AS data_type, is_nullable "
                         + "FROM information_schema.columns "
-                        + "WHERE LOWER(table_schema) = 'public' AND LOWER(table_name) = ? "
+                        + "WHERE LOWER(table_schema) = LOWER(SCHEMA()) AND LOWER(table_name) = ? "
                         + "ORDER BY ordinal_position",
                 tableName
         );

@@ -39,7 +39,8 @@ type ViewName = 'run' | 'evaluation'
 
 const examples = [
   { label: '模糊订单问题', prompt: '帮我看看订单情况', icon: MessageCircleQuestion },
-  { label: '城市订单金额', prompt: '统计各城市已完成订单金额', icon: Gauge },
+  { label: '用户城市订单金额', prompt: '按下单用户所在城市统计已完成订单金额', icon: Gauge },
+  { label: '跨月分表查询', prompt: '按成交店铺所在城市统计 2026 年 7 月到 8 月已完成订单金额', icon: Database },
   { label: '订单表结构', prompt: '查看订单事实表字段', icon: ListTree },
   { label: '搜索元数据', prompt: '搜索订单主题数据表', icon: Search },
 ]
@@ -63,7 +64,7 @@ const feedbackComment = ref('')
 const run = ref<AgentRun | null>(null)
 const report = ref<EvaluationReport | null>(null)
 const error = ref('')
-const selectedPlanner = ref('offline')
+const selectedPlanner = ref('openai')
 const evaluationPlanner = ref('offline')
 const planners = ref<PlannerDescriptor[]>([
   { mode: 'offline', promptVersion: 'offline-rules-v2', model: 'deterministic', ready: true },
@@ -83,6 +84,8 @@ const resultColumns = computed(() => resultRows.value.length > 0 ? Object.keys(r
 onMounted(async () => {
   try {
     planners.value = await listPlanners()
+    const readyModelPlanner = planners.value.find((planner) => planner.mode === 'openai' && planner.ready)
+    selectedPlanner.value = readyModelPlanner?.mode ?? 'offline'
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : 'Planner 列表加载失败'
   }

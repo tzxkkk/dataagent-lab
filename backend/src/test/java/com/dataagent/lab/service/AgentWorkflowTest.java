@@ -32,7 +32,7 @@ class AgentWorkflowTest {
         assertThat(clarified.getEffectiveInput()).isEqualTo("统计各城市已完成订单金额");
         assertThat(clarified.getPlanPreview().sourceTables()).containsExactly("fact_order", "dim_user");
         assertThat(clarified.getPlanPreview().assumptions())
-                .contains("将 COMPLETED 作为已完成订单口径", "金额指标使用 fact_order.order_amount");
+                .contains("将 COMPLETED 作为已完成订单口径", "金额指标使用目录和表结构中确认的 order_amount 字段");
         assertThat(clarified.getExecutedTools()).isEmpty();
     }
 

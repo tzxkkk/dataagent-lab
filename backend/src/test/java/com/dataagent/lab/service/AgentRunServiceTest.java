@@ -14,7 +14,7 @@ class AgentRunServiceTest {
 
     @Test
     void recordsStructuredTraceForSuccessfulRun() {
-        var run = runService.run("统计各城市已完成订单金额");
+        var run = runService.run("统计各城市已完成订单金额", "offline");
 
         assertThat(run.getStatus()).isEqualTo(RunStatus.SUCCEEDED);
         assertThat(run.getExecutedTools()).containsExactly("run_readonly_sql");
@@ -24,4 +24,3 @@ class AgentRunServiceTest {
         assertThat(run.getOutput()).contains("武汉", "150.00", "北京", "200.00");
     }
 }
-

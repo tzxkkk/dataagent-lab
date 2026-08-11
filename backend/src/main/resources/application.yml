@@ -2,10 +2,12 @@ spring:
   application:
     name: dataagent-lab
   datasource:
-    url: jdbc:h2:mem:dataagent;MODE=MySQL;DB_CLOSE_DELAY=-1;DATABASE_TO_LOWER=TRUE
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
+    url: "${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/dataagent_lab?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true}"
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: ${SPRING_DATASOURCE_MAXIMUM_POOL_SIZE:10}
+      minimum-idle: ${SPRING_DATASOURCE_MINIMUM_IDLE:2}
+      connection-timeout: ${SPRING_DATASOURCE_CONNECTION_TIMEOUT_MS:10000}
   sql:
     init:
       mode: always
@@ -14,12 +16,19 @@ spring:
 server:
   port: 8080
 
+dataagent:
+  database:
+    credentials-file: ${DATAAGENT_MYSQL_CREDENTIALS_FILE:../mysqlConfigue}
+
 agent:
   planner:
-    default-mode: ${AGENT_PLANNER_MODE:offline}
+    default-mode: ${AGENT_PLANNER_MODE:openai}
   openai:
-    enabled: ${AGENT_OPENAI_ENABLED:false}
-    base-url: ${AGENT_OPENAI_BASE_URL:https://api.openai.com/v1}
+    enabled: ${AGENT_OPENAI_ENABLED:true}
+    base-url: ${AGENT_OPENAI_BASE_URL:https://api.deepseek.com/v1}
     api-key: ${AGENT_OPENAI_API_KEY:}
-    model: ${AGENT_OPENAI_MODEL:gpt-4.1-mini}
-    timeout-seconds: ${AGENT_OPENAI_TIMEOUT_SECONDS:30}
+    api-key-file: ${AGENT_OPENAI_API_KEY_FILE:../apikey.txt}
+    model: ${AGENT_OPENAI_MODEL:deepseek-chat}
+    timeout-seconds: ${AGENT_OPENAI_TIMEOUT_SECONDS:45}
+    max-planning-steps: ${AGENT_OPENAI_MAX_PLANNING_STEPS:12}
+    proxy-url: ${AGENT_OPENAI_PROXY_URL:}

@@ -3,6 +3,7 @@ package com.dataagent.lab.service;
 import com.dataagent.lab.domain.AgentPlan;
 import com.dataagent.lab.domain.AgentRun;
 import com.dataagent.lab.domain.PlannerUsage;
+import com.dataagent.lab.domain.PlanningToolStep;
 import com.dataagent.lab.domain.RunEvidence;
 import com.dataagent.lab.domain.RunFeedback;
 import com.dataagent.lab.domain.RunStatus;
@@ -12,6 +13,7 @@ import com.dataagent.lab.domain.TraceEvent;
 import com.dataagent.lab.planner.AgentPlanner;
 import com.dataagent.lab.planner.PlannerDescriptor;
 import com.dataagent.lab.planner.PlannerRegistry;
+import com.dataagent.lab.repository.AgentRunRepository;
 import com.dataagent.lab.tool.AgentTool;
 import com.dataagent.lab.tool.ToolRegistry;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -32,6 +34,7 @@ public class AgentRunService {
     private final ObjectMapper objectMapper;
     private final UserIntentClarifier intentClarifier;
     private final PlanPreviewFactory previewFactory;
+    private final AgentRunRepository runRepository;
     private final Map<String, AgentRun> runs = new ConcurrentHashMap<>();
     private final Map<String, AgentPlan> pendingPlans = new ConcurrentHashMap<>();
 
@@ -40,13 +43,15 @@ public class AgentRunService {
             ToolRegistry toolRegistry,
             ObjectMapper objectMapper,
             UserIntentClarifier intentClarifier,
-            PlanPreviewFactory previewFactory
+            PlanPreviewFactory previewFactory,
+            AgentRunRepository runRepository
     ) {
         this.plannerRegistry = plannerRegistry;
         this.toolRegistry = toolRegistry;
         this.objectMapper = objectMapper;
         this.intentClarifier = intentClarifier;
         this.previewFactory = previewFactory;
+        this.runRepository = runRepository;
     }
 
     public AgentRun run(String input) {
@@ -59,11 +64,14 @@ public class AgentRunService {
         AgentRun run = createRun(input, plannerMode, null);
         try {
             AgentPlan plan = plan(run, false);
-            execute(run, plan);
+            if (!plan.requiresClarification()) {
+                execute(run, plan);
+            }
         } catch (RuntimeException exception) {
             fail(run, exception);
         } finally {
             run.setDurationMs((System.nanoTime() - startedAt) / 1_000_000);
+            runRepository.save(run);
         }
         return run;
     }
@@ -76,12 +84,17 @@ public class AgentRunService {
         long startedAt = System.nanoTime();
         AgentRun run = createRun(input, plannerMode, normalizeNullable(parentRunId));
         try {
-            var clarification = intentClarifier.clarify(run.getEffectiveInput());
-            if (clarification.isPresent()) {
-                run.setClarification(clarification.get());
-                run.setStatus(RunStatus.WAITING_FOR_CLARIFICATION);
-                event(run, "CLARIFICATION_REQUIRED", clarification.get().question(),
-                        Map.of("options", clarification.get().options()));
+            AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
+            if (!planner.handlesClarification()) {
+                var clarification = intentClarifier.clarify(run.getEffectiveInput());
+                if (clarification.isPresent()) {
+                    run.setClarification(clarification.get());
+                    run.setStatus(RunStatus.WAITING_FOR_CLARIFICATION);
+                    event(run, "CLARIFICATION_REQUIRED", clarification.get().question(),
+                            Map.of("options", clarification.get().options(), "source", "deterministic_guard"));
+                } else {
+                    plan(run, true);
+                }
             } else {
                 plan(run, true);
             }
@@ -89,6 +102,7 @@ public class AgentRunService {
             fail(run, exception);
         } finally {
             run.setDurationMs((System.nanoTime() - startedAt) / 1_000_000);
+            runRepository.save(run);
         }
         return run;
     }
@@ -100,6 +114,7 @@ public class AgentRunService {
             requireStatus(run, RunStatus.WAITING_FOR_CLARIFICATION);
             long startedAt = System.nanoTime();
             run.setEffectiveInput(resolvedInput.trim());
+            run.setClarification(null);
             event(run, "CLARIFICATION_RESOLVED", "User selected a concrete analysis goal",
                     Map.of("effectiveInput", run.getEffectiveInput()));
             try {
@@ -108,6 +123,7 @@ public class AgentRunService {
                 fail(run, exception);
             } finally {
                 run.setDurationMs((System.nanoTime() - startedAt) / 1_000_000);
+                runRepository.save(run);
             }
             return run;
         }
@@ -119,8 +135,12 @@ public class AgentRunService {
             requireStatus(run, RunStatus.WAITING_FOR_APPROVAL);
             AgentPlan plan = pendingPlans.remove(id);
             if (plan == null) {
+                plan = runRepository.findPendingPlan(id).orElse(null);
+            }
+            if (plan == null) {
                 throw new IllegalStateException("Pending plan is missing for run: " + id);
             }
+            runRepository.deletePendingPlan(id);
             long startedAt = System.nanoTime();
             event(run, "APPROVAL_RECEIVED", "User approved the plan", Map.of());
             try {
@@ -129,6 +149,7 @@ public class AgentRunService {
                 fail(run, exception);
             } finally {
                 run.setDurationMs((System.nanoTime() - startedAt) / 1_000_000);
+                runRepository.save(run);
             }
             return run;
         }
@@ -168,11 +189,8 @@ public class AgentRunService {
     }
 
     public AgentRun require(String id) {
-        AgentRun run = runs.get(id);
-        if (run == null) {
-            throw new IllegalArgumentException("Run not found: " + id);
-        }
-        return run;
+        return runs.computeIfAbsent(id, runId -> runRepository.findById(runId)
+                .orElseThrow(() -> new IllegalArgumentException("Run not found: " + runId)));
     }
 
     private AgentRun createRun(String input, String plannerMode, String parentRunId) {
@@ -195,9 +213,22 @@ public class AgentRunService {
         AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
         run.setStatus(RunStatus.PLANNING);
         event(run, "PLANNING_STARTED", "Planner is selecting tools", Map.of());
-        AgentPlan plan = planner.plan(run.getEffectiveInput());
-        validatePlan(plan);
+        AgentPlan plan = planner.plan(run.getEffectiveInput(), step -> tracePlanningStep(run, step));
+        if (plan == null || plan.usage() == null) {
+            throw new IllegalStateException("Planner must return usage metadata");
+        }
         run.setPlannerUsage(plan.usage());
+        if (plan.requiresClarification()) {
+            run.setClarification(plan.clarification());
+            run.setStatus(RunStatus.WAITING_FOR_CLARIFICATION);
+            event(run, "CLARIFICATION_REQUIRED", plan.clarification().question(), Map.of(
+                    "options", plan.clarification().options(),
+                    "source", "model"
+            ));
+            return plan;
+        }
+
+        validatePlan(plan);
         run.setPlanPreview(previewFactory.create(plan));
         event(run, "PLAN_CREATED", plan.rationale(), Map.of(
                 "tools", plan.invocations().stream().map(ToolInvocation::toolName).toList(),
@@ -208,6 +239,7 @@ public class AgentRunService {
         ));
         if (waitForApproval) {
             pendingPlans.put(run.getId(), plan);
+            runRepository.savePendingPlan(run.getId(), plan);
             run.setStatus(RunStatus.WAITING_FOR_APPROVAL);
             event(run, "PLAN_REVIEW_REQUIRED", "Waiting for user approval before tool execution", Map.of(
                     "riskLevel", run.getPlanPreview().riskLevel(),
@@ -221,7 +253,7 @@ public class AgentRunService {
         run.setStatus(RunStatus.RUNNING);
         ToolResult lastResult = null;
         for (ToolInvocation invocation : plan.invocations()) {
-            AgentTool tool = toolRegistry.require(invocation.toolName());
+            AgentTool tool = toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
             run.addExecutedTool(tool.name());
             event(run, "TOOL_STARTED", "Executing " + tool.name(),
                     Map.of("tool", tool.name(), "arguments", invocation.arguments()));
@@ -263,6 +295,7 @@ public class AgentRunService {
 
     private void fail(AgentRun run, RuntimeException exception) {
         pendingPlans.remove(run.getId());
+        runRepository.deletePendingPlan(run.getId());
         String message = exception.getMessage() == null
                 ? exception.getClass().getSimpleName()
                 : exception.getMessage();
@@ -307,10 +340,28 @@ public class AgentRunService {
         if (plan.usage() == null) {
             throw new IllegalStateException("Planner usage metadata is required");
         }
+        ToolInvocation invocation = plan.invocations().get(0);
+        toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
     }
 
     private void event(AgentRun run, String type, String message, Map<String, Object> data) {
-        run.addEvent(new TraceEvent(run.getEvents().size() + 1, type, message, Instant.now(), data));
+        TraceEvent event = new TraceEvent(run.getEvents().size() + 1, type, message, Instant.now(), data);
+        run.addEvent(event);
+        runRepository.save(run);
+        runRepository.appendEvent(run.getId(), event);
+    }
+
+    private void tracePlanningStep(AgentRun run, PlanningToolStep step) {
+        event(
+                run,
+                step.result().success() ? "PLANNING_TOOL_SUCCEEDED" : "PLANNING_TOOL_FAILED",
+                step.result().summary(),
+                Map.of(
+                        "tool", step.invocation().toolName(),
+                        "arguments", step.invocation().arguments(),
+                        "result", step.result().data()
+                )
+        );
     }
 
     private static final class ToolExecutionException extends RuntimeException {

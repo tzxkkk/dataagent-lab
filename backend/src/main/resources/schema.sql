@@ -1,19 +1,4 @@
-DROP TABLE IF EXISTS dataset_relation;
-DROP TABLE IF EXISTS dataset_physical_table;
-DROP TABLE IF EXISTS logical_dataset;
-DROP TABLE IF EXISTS fact_refund;
-DROP TABLE IF EXISTS fact_payment;
-DROP TABLE IF EXISTS fact_inventory_snapshot;
-DROP TABLE IF EXISTS fact_order_202608;
-DROP TABLE IF EXISTS fact_order_202607;
-DROP TABLE IF EXISTS fact_order_202606;
-DROP TABLE IF EXISTS fact_order;
-DROP TABLE IF EXISTS dim_shop;
-DROP TABLE IF EXISTS dim_product;
-DROP TABLE IF EXISTS dim_user;
-DROP TABLE IF EXISTS metadata_catalog;
-
-CREATE TABLE metadata_catalog (
+CREATE TABLE IF NOT EXISTS metadata_catalog (
     table_name VARCHAR(64) PRIMARY KEY,
     display_name VARCHAR(128) NOT NULL,
     description VARCHAR(512) NOT NULL,
@@ -25,7 +10,7 @@ CREATE TABLE metadata_catalog (
     last_synced_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE logical_dataset (
+CREATE TABLE IF NOT EXISTS logical_dataset (
     dataset_id VARCHAR(64) PRIMARY KEY,
     display_name VARCHAR(128) NOT NULL,
     business_domain VARCHAR(64) NOT NULL,
@@ -37,7 +22,17 @@ CREATE TABLE logical_dataset (
     routing_column VARCHAR(64)
 );
 
-CREATE TABLE dataset_physical_table (
+CREATE TABLE IF NOT EXISTS dataset_field_catalog (
+    dataset_id VARCHAR(64) NOT NULL,
+    field_name VARCHAR(64) NOT NULL,
+    display_name VARCHAR(128) NOT NULL,
+    description VARCHAR(512) NOT NULL,
+    value_semantics VARCHAR(512),
+    PRIMARY KEY (dataset_id, field_name),
+    CONSTRAINT fk_field_dataset FOREIGN KEY (dataset_id) REFERENCES logical_dataset(dataset_id)
+);
+
+CREATE TABLE IF NOT EXISTS dataset_physical_table (
     dataset_id VARCHAR(64) NOT NULL,
     physical_table_name VARCHAR(64) NOT NULL,
     partition_value VARCHAR(16) NOT NULL,
@@ -46,7 +41,7 @@ CREATE TABLE dataset_physical_table (
     CONSTRAINT fk_mapping_dataset FOREIGN KEY (dataset_id) REFERENCES logical_dataset(dataset_id)
 );
 
-CREATE TABLE dataset_relation (
+CREATE TABLE IF NOT EXISTS dataset_relation (
     source_dataset_id VARCHAR(64) NOT NULL,
     target_dataset_id VARCHAR(64) NOT NULL,
     relation_type VARCHAR(32) NOT NULL,
@@ -57,13 +52,13 @@ CREATE TABLE dataset_relation (
     CONSTRAINT fk_relation_target FOREIGN KEY (target_dataset_id) REFERENCES logical_dataset(dataset_id)
 );
 
-CREATE TABLE dim_user (
+CREATE TABLE IF NOT EXISTS dim_user (
     user_id BIGINT PRIMARY KEY,
     city VARCHAR(64) NOT NULL,
     user_level VARCHAR(32) NOT NULL
 );
 
-CREATE TABLE dim_product (
+CREATE TABLE IF NOT EXISTS dim_product (
     product_id BIGINT PRIMARY KEY,
     product_name VARCHAR(128) NOT NULL,
     category VARCHAR(64) NOT NULL,
@@ -71,14 +66,14 @@ CREATE TABLE dim_product (
     unit_price DECIMAL(12, 2) NOT NULL
 );
 
-CREATE TABLE dim_shop (
+CREATE TABLE IF NOT EXISTS dim_shop (
     shop_id BIGINT PRIMARY KEY,
     shop_name VARCHAR(128) NOT NULL,
     city VARCHAR(64) NOT NULL,
     shop_type VARCHAR(32) NOT NULL
 );
 
-CREATE TABLE fact_order (
+CREATE TABLE IF NOT EXISTS fact_order (
     order_id BIGINT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
@@ -91,7 +86,7 @@ CREATE TABLE fact_order (
     CONSTRAINT fk_order_shop FOREIGN KEY (shop_id) REFERENCES dim_shop(shop_id)
 );
 
-CREATE TABLE fact_order_202606 (
+CREATE TABLE IF NOT EXISTS fact_order_202606 (
     order_id BIGINT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
@@ -101,7 +96,7 @@ CREATE TABLE fact_order_202606 (
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE fact_order_202607 (
+CREATE TABLE IF NOT EXISTS fact_order_202607 (
     order_id BIGINT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
@@ -111,7 +106,7 @@ CREATE TABLE fact_order_202607 (
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE fact_order_202608 (
+CREATE TABLE IF NOT EXISTS fact_order_202608 (
     order_id BIGINT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
@@ -121,7 +116,7 @@ CREATE TABLE fact_order_202608 (
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE fact_payment (
+CREATE TABLE IF NOT EXISTS fact_payment (
     payment_id BIGINT PRIMARY KEY,
     order_id BIGINT NOT NULL,
     payment_amount DECIMAL(12, 2) NOT NULL,
@@ -130,7 +125,7 @@ CREATE TABLE fact_payment (
     paid_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE fact_refund (
+CREATE TABLE IF NOT EXISTS fact_refund (
     refund_id BIGINT PRIMARY KEY,
     order_id BIGINT NOT NULL,
     refund_amount DECIMAL(12, 2) NOT NULL,
@@ -139,11 +134,58 @@ CREATE TABLE fact_refund (
     created_at TIMESTAMP NOT NULL
 );
 
-CREATE TABLE fact_inventory_snapshot (
+CREATE TABLE IF NOT EXISTS fact_inventory_snapshot (
     snapshot_date DATE NOT NULL,
     product_id BIGINT NOT NULL,
     shop_id BIGINT NOT NULL,
     available_quantity INT NOT NULL,
     locked_quantity INT NOT NULL,
     PRIMARY KEY (snapshot_date, product_id, shop_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_run (
+    run_id VARCHAR(36) PRIMARY KEY,
+    input_text LONGTEXT NOT NULL,
+    parent_run_id VARCHAR(36),
+    created_at TIMESTAMP(6) NOT NULL,
+    updated_at TIMESTAMP(6) NOT NULL,
+    status VARCHAR(32) NOT NULL,
+    effective_input LONGTEXT NOT NULL,
+    planner_mode VARCHAR(32) NOT NULL,
+    planner_usage_json LONGTEXT,
+    clarification_json LONGTEXT,
+    plan_preview_json LONGTEXT,
+    evidence_json LONGTEXT,
+    executed_tools_json LONGTEXT NOT NULL,
+    output_text LONGTEXT,
+    error_text LONGTEXT,
+    duration_ms BIGINT NOT NULL,
+    CONSTRAINT fk_agent_run_parent FOREIGN KEY (parent_run_id) REFERENCES agent_run(run_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_trace_event (
+    run_id VARCHAR(36) NOT NULL,
+    sequence_number INT NOT NULL,
+    event_type VARCHAR(64) NOT NULL,
+    message_text LONGTEXT NOT NULL,
+    occurred_at TIMESTAMP(6) NOT NULL,
+    data_json LONGTEXT NOT NULL,
+    PRIMARY KEY (run_id, sequence_number),
+    CONSTRAINT fk_trace_run FOREIGN KEY (run_id) REFERENCES agent_run(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS agent_run_feedback (
+    run_id VARCHAR(36) PRIMARY KEY,
+    rating VARCHAR(16) NOT NULL,
+    reason VARCHAR(128),
+    comment_text LONGTEXT,
+    submitted_at TIMESTAMP(6) NOT NULL,
+    CONSTRAINT fk_feedback_run FOREIGN KEY (run_id) REFERENCES agent_run(run_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS agent_pending_plan (
+    run_id VARCHAR(36) PRIMARY KEY,
+    plan_json LONGTEXT NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL,
+    CONSTRAINT fk_pending_plan_run FOREIGN KEY (run_id) REFERENCES agent_run(run_id) ON DELETE CASCADE
 );

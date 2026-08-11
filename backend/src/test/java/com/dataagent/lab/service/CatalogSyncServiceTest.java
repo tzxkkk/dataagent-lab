@@ -27,9 +27,14 @@ class CatalogSyncServiceTest {
                 "SELECT description FROM metadata_catalog WHERE table_name = 'fact_order'",
                 String.class
         );
+        Integer internalTablesInCatalog = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM metadata_catalog WHERE table_name LIKE 'agent_%'",
+                Integer.class
+        );
 
         assertThat(discoveredInventory).isEqualTo(1);
         assertThat(factOrderDescription).isEqualTo("用于原有 Golden Set 的订单基线表");
+        assertThat(internalTablesInCatalog).isZero();
         assertThat(catalogSyncService.syncMissingTables()).isZero();
     }
 }

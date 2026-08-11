@@ -59,6 +59,9 @@ public class PlanPreviewFactory {
         if (toolName.equals("resolve_dataset_tables")) {
             return List.of("dataset_physical_table");
         }
+        if (toolName.equals("get_dataset_context")) {
+            return List.of("logical_dataset", "dataset_field_catalog", "dataset_physical_table", "dataset_relation");
+        }
         if (sql == null) {
             return List.of();
         }
@@ -90,7 +93,7 @@ public class PlanPreviewFactory {
             assumptions.add("将 COMPLETED 作为已完成订单口径");
         }
         if (sql != null && sql.contains("order_amount")) {
-            assumptions.add("金额指标使用 fact_order.order_amount");
+            assumptions.add("金额指标使用目录和表结构中确认的 order_amount 字段");
         }
         if (toolName.equals("run_readonly_sql")) {
             assumptions.add("仅执行单条只读 SELECT，结果最多返回 200 行");

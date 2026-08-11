@@ -13,8 +13,13 @@ public class CatalogSyncService implements ApplicationRunner {
     private static final Set<String> INFRASTRUCTURE_TABLES = Set.of(
             "metadata_catalog",
             "logical_dataset",
+            "dataset_field_catalog",
             "dataset_physical_table",
-            "dataset_relation"
+            "dataset_relation",
+            "agent_run",
+            "agent_trace_event",
+            "agent_run_feedback",
+            "agent_pending_plan"
     );
 
     private final JdbcTemplate jdbcTemplate;
@@ -29,9 +34,14 @@ public class CatalogSyncService implements ApplicationRunner {
     }
 
     public int syncMissingTables() {
+        jdbcTemplate.update(
+                "DELETE FROM metadata_catalog WHERE maintenance_mode = 'AUTO_DISCOVERED' "
+                        + "AND LOWER(table_name) IN ('agent_run', 'agent_trace_event', "
+                        + "'agent_run_feedback', 'agent_pending_plan')"
+        );
         List<String> physicalTables = jdbcTemplate.queryForList(
                 "SELECT LOWER(table_name) FROM information_schema.tables "
-                        + "WHERE LOWER(table_schema) = 'public' AND table_type = 'BASE TABLE' "
+                        + "WHERE LOWER(table_schema) = LOWER(SCHEMA()) AND table_type = 'BASE TABLE' "
                         + "ORDER BY table_name",
                 String.class
         );

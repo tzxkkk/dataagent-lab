@@ -10,15 +10,17 @@ knows the exact metric or will trust an opaque result.
 
 ## Product boundary
 
-The first version supports three representative tasks:
+The current version supports five representative tasks:
 
-1. Search the data catalog.
-2. Inspect a table schema.
-3. Execute one read-only analytical query.
+1. Search physical-table and logical-dataset catalogs.
+2. Resolve logical datasets to maintained physical partitions.
+3. Load maintained field semantics, dataset relationships, and physical schemas.
+4. Ask a model-generated clarification when the request is materially ambiguous.
+5. Submit and execute one guarded read-only analytical query after approval.
 
 It does not attempt to reproduce a full warehouse, scheduler, or BI product.
-Those systems are represented by stable tool contracts that can later point to
-MySQL, Hive, or HTTP services.
+The local runtime now executes against MySQL through stable tool contracts that
+can later point to a governed warehouse, Hive, or HTTP services.
 
 ## Harness design
 
@@ -26,8 +28,8 @@ The runtime separates decision-making from execution:
 
 ```text
 User request
-    -> clarify an ambiguous metric when needed
     -> PlannerRegistry (offline | openai)
+    -> model clarification, or bounded inspect-tool loop
     -> validated AgentPlan + user-visible preview
     -> user approval or revision branch
     -> ToolRegistry + guarded execution
@@ -36,9 +38,12 @@ User request
 ```
 
 The planner receives the same registered tool names and JSON input schemas used
-by the executor. A plan is accepted only when it contains exactly one known
-tool and usage metadata. Tool or parser failures become explicit failed runs
-instead of unstructured exceptions.
+by the executor. During model planning it may call only allow-listed metadata,
+dataset-context, partition-resolution, and schema tools. Their results are fed
+back into the next model turn and recorded in Trace. Planning is bounded by a
+maximum step count. A final plan is accepted only when it contains exactly one
+known tool, schema-valid arguments, and usage metadata. The final tool is not
+executed until approval.
 
 ## User workflow
 
@@ -57,21 +62,30 @@ The interactive API deliberately separates planning from execution:
 6. Optional feedback records up/down rating, a structured reason, and a comment.
    Feedback is an input to evaluation, not the only signal of Agent quality.
 
-The deterministic clarifier currently covers an intentionally narrow set of
-ambiguous order questions. It demonstrates the workflow without claiming an
-unimplemented general intent-understanding capability.
+Run snapshots, ordered Trace events, executed tools, evidence, feedback, and
+pending approval plans are persisted in MySQL. An application restart can load
+an existing Run through the same API and can continue a previously pending
+approval without asking the model to plan again.
 
-The current OpenAI-compatible adapter uses Prompt version `data-planner-v1` and
-records model name plus input/output tokens on every run. Its contract is tested
-against a local fake HTTP server for valid output, unknown tools, and malformed
-JSON.
+The deterministic clarifier remains only for the offline regression planner.
+The model planner can return a structured clarification question with two to
+five complete request options, so the interactive model path no longer relies
+on the order-specific clarification rules.
 
-## Why synthetic data is sufficient
+The current OpenAI-compatible adapter uses Prompt version `data-planner-v2` and
+records cumulative model input/output tokens across all planning turns. It can
+read a local API-key file without returning the secret through APIs or Trace.
+Its protocol is tested against a local HTTP server for clarification, inspection
+loops, final tool selection, unknown tools, and malformed JSON.
+
+## Why MySQL still uses synthetic data
 
 This project evaluates Agent engineering, not the commercial value of a private
 dataset. A small order-domain warehouse provides deterministic expected
-answers, repeatable safety cases, no privacy dependency, and fast local tests.
-The data can be regenerated on each startup.
+answers, repeatable safety cases, and no privacy dependency. The interactive
+runtime uses a local MySQL database, while isolated automated tests use H2 in
+MySQL compatibility mode. Startup initialization is idempotent and does not
+drop existing MySQL tables.
 
 ## Safety boundary
 
@@ -80,6 +94,9 @@ The data can be regenerated on each startup.
 - exactly one statement and no semicolon;
 - `SELECT` statements only;
 - rejection of unsafe clauses such as `FOR UPDATE` and `INTO OUTFILE`;
+- rejection of reads from internal Run, Trace, feedback, and pending-plan tables;
+- allow-list enforcement against the business metadata catalog and rejection of
+  explicit cross-schema queries;
 - automatic `LIMIT 200` when no numeric limit is present.
 
 These checks are application guardrails, not a replacement for database-level
@@ -104,11 +121,18 @@ the resulting report is retained with its model and Prompt metadata.
 
 ## Current limitations
 
-- Runs are stored in memory rather than a durable database.
 - Feedback is recorded per Run but no aggregate analytics or implicit behavior
   metrics are persisted yet.
-- The planner selects one tool per request; multi-step planning is a future
-  experiment, not an implied current capability.
+- Model planning is bounded and sequential; it does not yet support parallel
+  tool calls, durable conversation memory, or automatic retry/backoff policy.
+- Cross-partition SQL can be generated as one `SELECT` containing `UNION ALL`,
+  but there is no distributed query engine or production shard middleware.
+- Local MySQL startup uses one credential for schema initialization and query
+  execution; production should separate migrations from a least-privilege,
+  read-only Agent account.
+- The local runtime uses an in-process cache over the MySQL repository and does
+  not yet implement optimistic locking for concurrent writes from multiple
+  application replicas.
 - The 24-case Golden Set is still domain-specific and is not a statistical
   benchmark for general model capability.
 - Authentication, tenant isolation, retries, and rate limiting are outside the

@@ -29,11 +29,15 @@ public final class AgentRun {
     }
 
     public AgentRun(String id, String input, String parentRunId) {
+        this(id, input, parentRunId, Instant.now());
+    }
+
+    public AgentRun(String id, String input, String parentRunId, Instant createdAt) {
         this.id = id;
         this.input = input;
         this.effectiveInput = input;
         this.parentRunId = parentRunId;
-        this.createdAt = Instant.now();
+        this.createdAt = createdAt;
         this.status = RunStatus.CREATED;
     }
 
