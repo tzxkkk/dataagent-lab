@@ -39,6 +39,7 @@ public class AgentRunController {
     @PostMapping("/runs/preview")
     @ResponseStatus(HttpStatus.CREATED)
     public AgentRun preview(@RequestBody PreviewRunRequest request) {
+        // Controller 只负责 HTTP 参数转换，状态流转、规划和执行都交给 AgentRunService。
         return runService.preview(request.input(), request.plannerMode(), request.parentRunId());
     }
 
@@ -49,6 +50,7 @@ public class AgentRunController {
 
     @PostMapping("/runs/{id}/approve")
     public AgentRun approve(@PathVariable String id) {
+        // 不接收前端传来的 Plan，避免审批后参数被客户端替换。
         return runService.approve(id);
     }
 

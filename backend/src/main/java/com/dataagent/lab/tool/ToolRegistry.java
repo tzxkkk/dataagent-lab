@@ -30,6 +30,7 @@ public class ToolRegistry {
     }
 
     public AgentTool requireValidated(String name, Map<String, Object> arguments) {
+        // 先做通用 JSON Schema 校验，再调用具体工具的业务校验；模型不能绕过任意一层。
         AgentTool tool = require(name);
         Map<String, Object> normalizedArguments = arguments == null ? Map.of() : arguments;
         validateArguments(tool, normalizedArguments);
@@ -41,6 +42,7 @@ public class ToolRegistry {
     }
 
     public List<ToolDefinition> describe() {
+        // 同一份工具定义既提供给模型选择，也用于后端运行时校验，避免两边参数约定漂移。
         return tools.values().stream()
                 .map(tool -> new ToolDefinition(tool.name(), tool.description(), tool.inputSchema()))
                 .toList();

@@ -91,6 +91,7 @@ onMounted(async () => {
   }
 })
 
+// 页面上的规划、澄清、审批都通过这里更新同一个 AgentRun，并统一处理加载态和接口错误。
 async function perform(task: () => Promise<AgentRun>, fallbackMessage: string) {
   if (busy.value) return
   busy.value = true
@@ -108,6 +109,7 @@ async function generatePlan() {
   if (!input.value.trim()) return
   revising.value = false
   showNegativeFeedback.value = false
+  // “生成计划”只请求预览；真正的最终工具要等用户在计划卡片中确认后才执行。
   await perform(() => previewRun(input.value.trim(), selectedPlanner.value), '计划生成失败')
 }
 
@@ -119,6 +121,7 @@ async function chooseClarification(resolvedInput: string) {
 
 async function approve() {
   if (!run.value) return
+  // 审批接口使用 runId 找回后端保存的待执行计划，前端不会再次提交或改写工具参数。
   await perform(() => approveRun(run.value!.id), '执行计划失败')
 }
 

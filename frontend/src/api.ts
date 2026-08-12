@@ -50,6 +50,7 @@ export async function previewRun(
   parentRunId: string | null = null,
 ): Promise<AgentRun> {
   if (useMock) return mockPreviewRun(input, plannerMode, parentRunId)
+  // 首次请求 parentRunId 为空；修改已有查询时，它用于保留新旧 Run 的分支关系。
   const response = await fetch('/api/runs/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -68,6 +69,7 @@ export async function clarifyRun(id: string, resolvedInput: string): Promise<Age
   return readResponse(response, '澄清请求失败')
 }
 
+// 审批时只传 runId，确保执行的是后端在预览阶段已经校验并持久化的那份计划。
 export async function approveRun(id: string): Promise<AgentRun> {
   if (useMock) return mockApproveRun(id)
   const response = await fetch(`/api/runs/${encodeURIComponent(id)}/approve`, { method: 'POST' })

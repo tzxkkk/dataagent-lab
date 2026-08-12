@@ -76,6 +76,7 @@ public class ReadOnlySqlTool implements AgentTool {
 
     @Override
     public ToolResult execute(Map<String, Object> arguments) {
+        // 执行前再次校验 SQL；没有显式 LIMIT 时由后端统一追加 200 行上限。
         String sql = String.valueOf(arguments.getOrDefault("sql", "")).trim();
         String rejection = validate(arguments);
         if (rejection != null) {
@@ -93,6 +94,7 @@ public class ReadOnlySqlTool implements AgentTool {
     }
 
     String validate(String sql) {
+        // 安全校验顺序：单条语句 -> JSqlParser 确认 SELECT -> 表白名单 -> 危险子句 -> 数据库语义检查。
         if (sql.isBlank()) {
             return "SQL 不能为空";
         }
@@ -108,6 +110,7 @@ public class ReadOnlySqlTool implements AgentTool {
         } catch (Exception exception) {
             return "SQL 解析失败：请检查语法、关键字和括号是否完整";
         }
+        // 从语法树提取真实引用表，禁止访问 Agent 内部表、跨 Schema 和目录外物理表。
         Set<String> referencedTables = new TablesNamesFinder().getTables(statement);
         boolean accessesInternalTable = referencedTables.stream()
                 .map(this::simpleTableName)
@@ -137,6 +140,7 @@ public class ReadOnlySqlTool implements AgentTool {
         if (normalized.contains(" union all ") && groupByCount(normalized) > 1) {
             return "跨分表聚合必须先用 UNION ALL 合并明细，再由外层 SELECT 统一聚合";
         }
+        // EXPLAIN 在真正查询前发现不存在的字段、歧义列和子查询未暴露字段。
         return validateQuerySemantics(sql);
     }
 

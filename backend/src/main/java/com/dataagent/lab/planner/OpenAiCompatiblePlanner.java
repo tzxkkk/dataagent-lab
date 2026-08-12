@@ -97,6 +97,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             throw new IllegalStateException("必须配置模型规划器使用的模型");
         }
 
+        // Prompt 中包含注册工具的名称、说明和 JSON 参数结构，模型只能从这些工具中选择。
         List<Map<String, Object>> messages = new ArrayList<>();
         messages.add(Map.of("role", "system", "content", promptCatalog.systemPrompt(toolRegistry.describe())));
         messages.add(Map.of("role", "user", "content", input));
@@ -106,6 +107,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
         int outputTokens = 0;
         String actualModel = model;
 
+        // 一轮模型响应只能选择 clarify、inspect 或 final；inspect 结果会加入上下文后继续规划。
         for (int attempt = 0; attempt <= maxPlanningSteps; attempt++) {
             ModelTurn turn = call(messages);
             inputTokens += turn.inputTokens();
@@ -130,6 +132,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             }
 
             if ("clarify".equals(action)) {
+                // 缺少关键口径时停止规划，把结构化选项交回用户，而不是替用户猜测。
                 ClarificationPrompt clarification = clarification(output);
                 return new AgentPlan(
                         rationale,
@@ -149,6 +152,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
 
             if ("final".equals(action)) {
                 try {
+                    // final 只是提交候选工具调用；后端校验通过后仍需用户审批，尚未执行工具。
                     toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
                     return new AgentPlan(
                             rationale,
@@ -188,6 +192,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
 
             ToolResult result;
             try {
+                // 规划阶段只允许执行目录类检查工具，用结果帮助模型确定真实表、字段和分表。
                 AgentTool tool = toolRegistry.requireValidated(invocation.toolName(), invocation.arguments());
                 result = tool.execute(invocation.arguments());
             } catch (IllegalArgumentException exception) {

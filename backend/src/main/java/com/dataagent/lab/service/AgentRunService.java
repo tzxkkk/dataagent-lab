@@ -82,6 +82,7 @@ public class AgentRunService {
     }
 
     public AgentRun preview(String input, String plannerMode, String parentRunId) {
+        // 预览主链路：创建 Run -> 检查 DQL 边界 -> 澄清或规划 -> 保存待审批计划。
         validateInput(input);
         if (parentRunId != null && !parentRunId.isBlank()) {
             require(parentRunId);
@@ -118,6 +119,7 @@ public class AgentRunService {
         validateInput(resolvedInput);
         AgentRun run = require(id);
         synchronized (run) {
+            // 澄清不会创建新 Run，而是在原 Run 上替换有效问题，然后重新进入规划阶段。
             requireStatus(run, RunStatus.WAITING_FOR_CLARIFICATION);
             long startedAt = System.nanoTime();
             run.setEffectiveInput(resolvedInput.trim());
@@ -141,9 +143,11 @@ public class AgentRunService {
     public AgentRun approve(String id) {
         AgentRun run = require(id);
         synchronized (run) {
+            // 只允许 WAITING_FOR_APPROVAL 进入执行，重复审批或跨状态调用都会被拒绝。
             requireStatus(run, RunStatus.WAITING_FOR_APPROVAL);
             AgentPlan plan = pendingPlans.remove(id);
             if (plan == null) {
+                // 内存中没有时从 MySQL 恢复，因此服务重启后仍能继续审批。
                 plan = runRepository.findPendingPlan(id).orElse(null);
             }
             if (plan == null) {
@@ -203,6 +207,7 @@ public class AgentRunService {
     }
 
     private AgentRun createRun(String input, String plannerMode, String parentRunId) {
+        // 先建立运行档案，后续 Planner、工具、错误和 Trace 都以 runId 串在一起。
         AgentPlanner planner = plannerRegistry.require(plannerMode);
         PlannerDescriptor descriptor = planner.descriptor();
         AgentRun run = new AgentRun(UUID.randomUUID().toString(), input.trim(), parentRunId);
@@ -219,6 +224,7 @@ public class AgentRunService {
     }
 
     private AgentPlan plan(AgentRun run, boolean waitForApproval) {
+        // Service 管状态，Planner 只产出“澄清问题”或“一次最终工具调用”。
         AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
         run.setStatus(RunStatus.PLANNING);
         event(run, "PLANNING_STARTED", "规划器正在选择工具", Map.of());
@@ -237,6 +243,7 @@ public class AgentRunService {
             return plan;
         }
 
+        // 模型给出的工具名和参数必须先通过后端校验，合格后才生成给用户看的预览。
         validatePlan(plan);
         run.setPlanPreview(previewFactory.create(plan));
         event(run, "PLAN_CREATED", plan.rationale(), Map.of(
@@ -247,6 +254,7 @@ public class AgentRunService {
                 "outputTokens", plan.usage().outputTokens()
         ));
         if (waitForApproval) {
+            // 待审批 Plan 同时保存在内存和 MySQL；此处不执行最终工具。
             pendingPlans.put(run.getId(), plan);
             runRepository.savePendingPlan(run.getId(), plan);
             run.setStatus(RunStatus.WAITING_FOR_APPROVAL);
@@ -259,6 +267,7 @@ public class AgentRunService {
     }
 
     private void execute(AgentRun run, AgentPlan plan) {
+        // 审批后的统一执行入口：再次校验工具和参数，再由注册工具访问数据库。
         run.setStatus(RunStatus.RUNNING);
         ToolResult lastResult = null;
         for (ToolInvocation invocation : plan.invocations()) {
@@ -357,6 +366,7 @@ public class AgentRunService {
     }
 
     private void validatePlan(AgentPlan plan) {
+        // 当前交互设计要求一个计划只能包含一次最终工具调用，便于预览、审批和追责。
         if (plan == null || plan.invocations() == null || plan.invocations().size() != 1) {
             throw new IllegalStateException("规划器必须返回且只能返回一次工具调用");
         }
@@ -368,6 +378,7 @@ public class AgentRunService {
     }
 
     private void event(AgentRun run, String type, String message, Map<String, Object> data) {
+        // 每次关键状态变化同时写入 Run 快照和追加式 Trace，页面右侧轨迹由这些事件组成。
         TraceEvent event = new TraceEvent(run.getEvents().size() + 1, type, message, Instant.now(), data);
         run.addEvent(event);
         runRepository.save(run);

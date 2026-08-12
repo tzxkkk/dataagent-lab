@@ -38,6 +38,7 @@ public class AgentRunRepository {
     }
 
     public void save(AgentRun run) {
+        // 保存当前 Run 快照；首次保存走 INSERT，之后的状态变化走 UPDATE。
         Instant updatedAt = Instant.now();
         int updated = jdbcTemplate.update(
                 "UPDATE agent_run SET input_text = ?, parent_run_id = ?, updated_at = ?, status = ?, "
@@ -154,6 +155,7 @@ public class AgentRunRepository {
     }
 
     public void appendEvent(String runId, TraceEvent event) {
+        // Trace 使用追加写，保留每一步发生时的类型、消息、时间和结构化数据。
         jdbcTemplate.update(
                 "INSERT INTO agent_trace_event(run_id, sequence_number, event_type, message_text, occurred_at, "
                         + "data_json) VALUES (?, ?, ?, ?, ?, ?)",
@@ -167,6 +169,7 @@ public class AgentRunRepository {
     }
 
     public void savePendingPlan(String runId, AgentPlan plan) {
+        // 待审批计划独立持久化，审批接口只凭 runId 读取，防止客户端篡改预览后的参数。
         int updated = jdbcTemplate.update(
                 "UPDATE agent_pending_plan SET plan_json = ?, created_at = ? WHERE run_id = ?",
                 write(plan), Timestamp.from(Instant.now()), runId
