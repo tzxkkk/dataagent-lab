@@ -30,6 +30,12 @@ function isAmbiguous(input: string) {
   return input.includes('订单') && broad && !metric
 }
 
+function isNotImplemented(input: string) {
+  return /(新增|新建|创建|添加|建)\s*(一张|一个)?\s*[\p{Script=Han}a-z0-9_]{0,24}(数据)?表(?:并|且|，|。|：|:|\s|$)/iu.test(input)
+    || /\b(create|alter|drop|truncate|rename|comment|insert|replace|update|delete|merge|grant|revoke|commit|rollback|savepoint)\b/i.test(input)
+    || /(授权|赋权|授予权限|回收权限|撤销权限|提交事务|回滚事务)/.test(input)
+}
+
 function createPlan(input: string): PlanPreview {
   if (input.includes('结构') || input.includes('字段')) {
     return {
@@ -162,7 +168,11 @@ export async function mockPreviewRun(input: string, plannerMode: string, parentR
   await delay(260)
   const run = baseRun(input, plannerMode, parentRunId)
   addEvent(run, 'RUN_CREATED', '已接收分析请求', { mode: plannerMode, parentRunId })
-  if (isAmbiguous(input)) {
+  if (isNotImplemented(input)) {
+    run.status = 'NOT_IMPLEMENTED'
+    run.output = '当前版本只支持 DQL：数据目录检索、表结构查看和单条只读 SELECT 查询。DDL、DML、DCL 和 TCL 均标记为待完成，不会交给模型规划或数据库执行。'
+    addEvent(run, 'CAPABILITY_NOT_IMPLEMENTED', '请求超出当前只读能力范围')
+  } else if (isAmbiguous(input)) {
     run.status = 'WAITING_FOR_CLARIFICATION'
     run.clarification = {
       question: '你想从哪个角度查看订单？先确认指标可以避免 Agent 自行猜测口径。',

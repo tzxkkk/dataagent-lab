@@ -10,6 +10,7 @@ DataAgent Lab 是一个面向数据开发工作流的可复现智能体执行框
 - 后端采用 Java 17 + Spring Boot 3，前端采用 Vue 3 + TypeScript。
 - 基于注册表管理工具，运行时与模型提示词共享 JSON 输入模式。
 - 支持元数据搜索、表结构查看和只读 SQL 执行。
+- 运行期只支持 DQL；DDL、DML、DCL 和 TCL 请求不会交给模型继续规划，而是返回 `NOT_IMPLEMENTED`（功能待完成）。
 - 使用 JSqlParser 进行校验，强制执行单条语句，并自动添加 `LIMIT 200` 防护。
 - 从规划到工具执行均使用明确的运行状态和结构化 Trace 事件。
 - Run 状态、Trace、已执行工具、证据、反馈和待审批 Plan 持久化到 MySQL，服务重启后仍可查询历史或继续审批。
@@ -22,6 +23,25 @@ DataAgent Lab 是一个面向数据开发工作流的可复现智能体执行框
 - 确定性离线规划器仍保留为工程回归基线，不作为默认交互 Planner。
 - 分层 Golden Set 包含 24 个用例，覆盖元数据检索、Schema 路由、SQL 聚合和筛选查询，并提供分类报告。
 - 默认连接本机 MySQL，并以幂等方式初始化合成订单数据仓库；H2 仅用于隔离的自动化测试。
+
+## 当前能力边界
+
+当前版本面向新人熟悉业务数据库和完成简单查询，对数据库只开放 DQL，已经实现：
+
+- 根据自然语言搜索相关数据集和物理表。
+- 查看目录中已有表的字段结构与业务说明。
+- 生成、校验并执行单条只读 `SELECT`，结果最多返回 200 行；这是唯一允许执行的业务数据 SQL。
+
+以下数据库语言全部标记为待完成：
+
+- DDL：新增、修改、重命名或删除数据表、字段和索引。
+- DML：执行 `INSERT`、`UPDATE`、`DELETE`、`MERGE` 等数据写入操作。
+- DCL：执行 `GRANT`、`REVOKE` 等权限变更。
+- TCL：执行 `COMMIT`、`ROLLBACK`、`SAVEPOINT` 等事务控制。
+
+用户提出上述请求时，后端会在调用模型前终止规划，返回 `NOT_IMPLEMENTED` 并记录 Trace，不会生成或执行非 DQL SQL。要在生产环境开放这类能力，还需要补充身份与表级权限、变更审批、影响评估、审计、幂等迁移和回滚方案。
+
+需要注意，应用首次启动时会通过 `schema.sql` 初始化本地演示库，这是项目部署过程，不是 Agent 面向用户提供的建表功能。生产环境应使用专门的数据库迁移账号完成结构变更，Agent 运行账号只保留必要的只读权限。
 
 ## 仓库结构
 
@@ -122,7 +142,7 @@ mvn -f backend/pom.xml spring-boot:run
 
 ## API 示例
 
-交互式工作流会先创建预览。模型可以在规划阶段执行只读取元数据的检查工具；真正读取业务数据的最终 SQL 工具仍要等用户批准后才执行。返回状态为 `WAITING_FOR_CLARIFICATION` 或 `WAITING_FOR_APPROVAL`。
+交互式工作流会先创建预览。模型可以在规划阶段执行只读取元数据的检查工具；真正读取业务数据的最终 SQL 工具仍要等用户批准后才执行。正常请求返回 `WAITING_FOR_CLARIFICATION` 或 `WAITING_FOR_APPROVAL`；建表、改表和数据写入请求直接返回 `NOT_IMPLEMENTED`。
 
 ```http
 POST /api/runs/preview

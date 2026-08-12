@@ -9,7 +9,7 @@ import java.util.List;
 
 @Component
 public class PlannerPromptCatalog {
-    public static final String VERSION = "data-planner-v5";
+    public static final String VERSION = "data-planner-v6";
 
     private final ObjectMapper objectMapper;
 
@@ -34,6 +34,8 @@ public class PlannerPromptCatalog {
                         "options":[{"label":"订单金额趋势","resolvedInput":"按月统计订单金额趋势"}]}
 
                     Rules:
+                    - This product supports DQL only. Never plan or suggest DDL, DML, DCL, or TCL operations.
+                      The only executable business-data SQL is exactly one read-only SELECT statement.
                     - All user-facing natural-language values MUST use Simplified Chinese, including rationale,
                       question, option label, and resolvedInput. Keep JSON keys, tool names, table names,
                       column names, SQL, and enum values unchanged.

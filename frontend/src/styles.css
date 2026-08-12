@@ -157,6 +157,12 @@ h2 { font-size: 16px; line-height: 24px; }
 .failure-card { border-left: 3px solid #b45049; }
 .failure-card .card-kicker, .failure-card h2 { color: #9a352f; }
 .failure-card .secondary-button { margin-top: 14px; }
+.not-implemented-card { border-left: 3px solid #b07825; }
+.not-implemented-card .card-kicker, .not-implemented-card h2 { color: #8b5c1e; }
+.not-implemented-card > p { margin: 10px 0 0; color: #66717c; font-size: 13px; line-height: 1.75; }
+.capability-boundary { display: flex; gap: 12px; margin-top: 15px; padding: 11px 12px; background: #fff8ec; border: 1px solid #eed8b3; border-radius: 5px; }
+.capability-boundary strong { flex: 0 0 auto; color: #80551e; font-size: 12px; }
+.capability-boundary span { color: #6e6251; font-size: 12px; }
 .workflow-empty { min-height: 270px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; color: #929ba5; }
 .workflow-empty strong { color: #68737f; font-size: 13px; }
 .workflow-empty span { font-size: 12px; }
@@ -187,6 +193,7 @@ h2 { font-size: 16px; line-height: 24px; }
 .run-summary small { width: 100%; color: #87919b; font: 10px Consolas, monospace; }
 .run-status { padding: 2px 5px; color: #6b5a34; background: #fff0d3; border-radius: 3px; font: 10px Consolas, monospace; }
 .run-status.succeeded { color: #176c51; background: #ddf2ea; }
+.run-status.not_implemented { color: #86591d; background: #fff0d3; }
 .run-status.failed { color: #9a352f; background: #f9e3e1; }
 .trace-list { margin: 24px 0 0; padding: 0; list-style: none; }
 .trace-list li { position: relative; display: grid; grid-template-columns: 26px 1fr 24px; gap: 9px; min-height: 66px; }

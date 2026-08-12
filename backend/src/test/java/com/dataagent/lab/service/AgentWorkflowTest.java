@@ -5,6 +5,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import java.util.List;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -21,6 +23,40 @@ class AgentWorkflowTest {
         assertThat(run.getClarification().options()).hasSize(4);
         assertThat(run.getPlanPreview()).isNull();
         assertThat(run.getExecutedTools()).isEmpty();
+    }
+
+    @Test
+    void marksTableCreationAsNotImplementedWithoutCallingThePlanner() {
+        var unsupportedRequests = List.of(
+                "新增表：表名=xxx，字段列表=字段名1 类型1 说明1",
+                "新增订单表并定义字段",
+                "INSERT INTO fact_order(order_id) VALUES (100)",
+                "UPDATE fact_order SET status = 'COMPLETED'",
+                "给 analyst 授予 fact_order 的查询权限",
+                "回滚当前事务"
+        );
+
+        for (String input : unsupportedRequests) {
+            var run = runService.preview(input, "offline", null);
+            assertThat(run.getStatus()).isEqualTo(RunStatus.NOT_IMPLEMENTED);
+            assertThat(run.getOutput()).contains("只支持 DQL", "DDL、DML、DCL 和 TCL");
+            assertThat(run.getClarification()).isNull();
+            assertThat(run.getPlanPreview()).isNull();
+            assertThat(run.getExecutedTools()).isEmpty();
+            assertThat(run.getPlannerUsage().inputTokens()).isZero();
+            assertThat(run.getPlannerUsage().outputTokens()).isZero();
+            assertThat(run.getEvents()).extracting("type")
+                    .containsExactly("RUN_CREATED", "CAPABILITY_NOT_IMPLEMENTED");
+        }
+    }
+
+    @Test
+    void keepsReadOnlyQueriesInsideTheSupportedDqlBoundary() {
+        var run = runService.preview("查询新增订单数量", "offline", null);
+
+        assertThat(run.getStatus()).isNotEqualTo(RunStatus.NOT_IMPLEMENTED);
+        assertThat(run.getEvents()).extracting("type")
+                .doesNotContain("CAPABILITY_NOT_IMPLEMENTED");
     }
 
     @Test

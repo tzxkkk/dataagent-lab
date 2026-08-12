@@ -7,5 +7,6 @@ public enum RunStatus {
     WAITING_FOR_APPROVAL,
     RUNNING,
     SUCCEEDED,
+    NOT_IMPLEMENTED,
     FAILED
 }

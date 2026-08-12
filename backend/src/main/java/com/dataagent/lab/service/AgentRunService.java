@@ -33,6 +33,7 @@ public class AgentRunService {
     private final ToolRegistry toolRegistry;
     private final ObjectMapper objectMapper;
     private final UserIntentClarifier intentClarifier;
+    private final CapabilityBoundaryGuard capabilityBoundaryGuard;
     private final PlanPreviewFactory previewFactory;
     private final AgentRunRepository runRepository;
     private final Map<String, AgentRun> runs = new ConcurrentHashMap<>();
@@ -43,6 +44,7 @@ public class AgentRunService {
             ToolRegistry toolRegistry,
             ObjectMapper objectMapper,
             UserIntentClarifier intentClarifier,
+            CapabilityBoundaryGuard capabilityBoundaryGuard,
             PlanPreviewFactory previewFactory,
             AgentRunRepository runRepository
     ) {
@@ -50,6 +52,7 @@ public class AgentRunService {
         this.toolRegistry = toolRegistry;
         this.objectMapper = objectMapper;
         this.intentClarifier = intentClarifier;
+        this.capabilityBoundaryGuard = capabilityBoundaryGuard;
         this.previewFactory = previewFactory;
         this.runRepository = runRepository;
     }
@@ -63,9 +66,11 @@ public class AgentRunService {
         long startedAt = System.nanoTime();
         AgentRun run = createRun(input, plannerMode, null);
         try {
-            AgentPlan plan = plan(run, false);
-            if (!plan.requiresClarification()) {
-                execute(run, plan);
+            if (!markNotImplemented(run)) {
+                AgentPlan plan = plan(run, false);
+                if (!plan.requiresClarification()) {
+                    execute(run, plan);
+                }
             }
         } catch (RuntimeException exception) {
             fail(run, exception);
@@ -84,19 +89,21 @@ public class AgentRunService {
         long startedAt = System.nanoTime();
         AgentRun run = createRun(input, plannerMode, normalizeNullable(parentRunId));
         try {
-            AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
-            if (!planner.handlesClarification()) {
-                var clarification = intentClarifier.clarify(run.getEffectiveInput());
-                if (clarification.isPresent()) {
-                    run.setClarification(clarification.get());
-                    run.setStatus(RunStatus.WAITING_FOR_CLARIFICATION);
-                    event(run, "CLARIFICATION_REQUIRED", clarification.get().question(),
-                            Map.of("options", clarification.get().options(), "source", "deterministic_guard"));
+            if (!markNotImplemented(run)) {
+                AgentPlanner planner = plannerRegistry.require(run.getPlannerMode());
+                if (!planner.handlesClarification()) {
+                    var clarification = intentClarifier.clarify(run.getEffectiveInput());
+                    if (clarification.isPresent()) {
+                        run.setClarification(clarification.get());
+                        run.setStatus(RunStatus.WAITING_FOR_CLARIFICATION);
+                        event(run, "CLARIFICATION_REQUIRED", clarification.get().question(),
+                                Map.of("options", clarification.get().options(), "source", "deterministic_guard"));
+                    } else {
+                        plan(run, true);
+                    }
                 } else {
                     plan(run, true);
                 }
-            } else {
-                plan(run, true);
             }
         } catch (RuntimeException exception) {
             fail(run, exception);
@@ -118,7 +125,9 @@ public class AgentRunService {
             event(run, "CLARIFICATION_RESOLVED", "用户已选择明确的分析目标",
                     Map.of("effectiveInput", run.getEffectiveInput()));
             try {
-                plan(run, true);
+                if (!markNotImplemented(run)) {
+                    plan(run, true);
+                }
             } catch (RuntimeException exception) {
                 fail(run, exception);
             } finally {
@@ -302,6 +311,20 @@ public class AgentRunService {
         run.setStatus(RunStatus.FAILED);
         run.setError(message);
         event(run, "RUN_FAILED", message, Map.of());
+    }
+
+    private boolean markNotImplemented(AgentRun run) {
+        var reason = capabilityBoundaryGuard.notImplementedReason(run.getEffectiveInput());
+        if (reason.isEmpty()) {
+            return false;
+        }
+        run.setStatus(RunStatus.NOT_IMPLEMENTED);
+        run.setOutput(reason.get());
+        event(run, "CAPABILITY_NOT_IMPLEMENTED", "请求超出当前只读能力范围", Map.of(
+                "supportedLanguage", "DQL",
+                "supportedCapabilities", List.of("数据目录检索", "表结构查看", "单条只读 SELECT 查询")
+        ));
+        return true;
     }
 
     private void requireStatus(AgentRun run, RunStatus expected) {
