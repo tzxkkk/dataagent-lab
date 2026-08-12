@@ -9,7 +9,7 @@ import java.util.List;
 
 @Component
 public class PlannerPromptCatalog {
-    public static final String VERSION = "data-planner-v3";
+    public static final String VERSION = "data-planner-v5";
 
     private final ObjectMapper objectMapper;
 
@@ -57,9 +57,15 @@ public class PlannerPromptCatalog {
                     - For an aggregate across multiple partitions, UNION ALL the row-level fields inside a
                       subquery and aggregate once in the outer SELECT. Do not return separately aggregated
                       partition rows unless the user explicitly requests a per-partition breakdown.
+                    - Every column referenced by the outer SELECT, JOIN, WHERE, GROUP BY, HAVING, or ORDER BY
+                      through a derived-table alias MUST be projected by every UNION ALL branch inside that
+                      derived table. Include filter columns such as status even when they are not final output.
                     - Use clarify only when different interpretations materially change the metric, scope,
                       time range, or grouping. Provide between 2 and 5 useful options.
                     - For a catalog or schema request that needs no prior inspection, submit that tool as final.
+                    - get_table_schema.tableName MUST be an exact technical table_name returned by the catalog,
+                      such as fact_order or dim_user. Never pass a Chinese display name or business phrase.
+                      If the user gives only a display name, inspect search_metadata first and ground the name.
                     - Return raw JSON without Markdown fences or additional text.
 
                     Tool registry:

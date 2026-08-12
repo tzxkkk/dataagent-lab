@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 class DatasetCatalogToolTest {
@@ -22,6 +23,9 @@ class DatasetCatalogToolTest {
 
     @Autowired
     private ToolRegistry toolRegistry;
+
+    @Autowired
+    private TableSchemaTool tableSchemaTool;
 
     @Test
     void searchesLogicalDatasetsInsteadOfScanningEveryPhysicalTable() {
@@ -80,5 +84,16 @@ class DatasetCatalogToolTest {
                 .contains("fact_order_202607", "fact_order_202608")
                 .contains("orders.user_id = users.user_id")
                 .contains("COMPLETED=已完成", "订单应付金额");
+    }
+
+    @Test
+    void rejectsDisplayNamesBeforeSchemaPlansReachApproval() {
+        assertThat(tableSchemaTool.validate(Map.of("tableName", "订单事实表")))
+                .contains("技术表名", "中文展示名");
+        assertThatThrownBy(() -> toolRegistry.requireValidated(
+                "get_table_schema",
+                Map.of("tableName", "订单事实表")
+        )).isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("技术表名");
     }
 }

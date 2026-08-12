@@ -40,12 +40,10 @@ public class TableSchemaTool implements AgentTool {
     }
 
     @Override
-    public ToolResult execute(Map<String, Object> arguments) {
-        String tableName = String.valueOf(arguments.getOrDefault("tableName", ""))
-                .trim()
-                .toLowerCase(Locale.ROOT);
+    public String validate(Map<String, Object> arguments) {
+        String tableName = tableName(arguments);
         if (!tableName.matches("[a-z0-9_]+")) {
-            return ToolResult.failure("表名格式不合法");
+            return "tableName 必须使用数据目录中的技术表名，不能使用中文展示名：" + tableName;
         }
 
         Integer catalogMatches = jdbcTemplate.queryForObject(
@@ -54,7 +52,17 @@ public class TableSchemaTool implements AgentTool {
                 tableName
         );
         if (catalogMatches == null || catalogMatches == 0) {
-            return ToolResult.failure("数据目录中不存在该表：" + tableName);
+            return "数据目录中不存在该表：" + tableName;
+        }
+        return null;
+    }
+
+    @Override
+    public ToolResult execute(Map<String, Object> arguments) {
+        String tableName = tableName(arguments);
+        String rejection = validate(arguments);
+        if (rejection != null) {
+            return ToolResult.failure(rejection);
         }
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
@@ -69,5 +77,11 @@ public class TableSchemaTool implements AgentTool {
         }
         return ToolResult.success("已读取 " + tableName + " 的 " + rows.size() + " 个字段",
                 Map.of("tableName", tableName, "columns", rows));
+    }
+
+    private String tableName(Map<String, Object> arguments) {
+        return String.valueOf(arguments.getOrDefault("tableName", ""))
+                .trim()
+                .toLowerCase(Locale.ROOT);
     }
 }

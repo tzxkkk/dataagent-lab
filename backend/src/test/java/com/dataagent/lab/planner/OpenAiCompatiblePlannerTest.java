@@ -39,7 +39,11 @@ class OpenAiCompatiblePlannerTest {
         server.createContext("/v1/chat/completions", this::handleRequest);
         server.start();
 
-        ToolRegistry toolRegistry = new ToolRegistry(List.of(new StubTool(), new SearchStubTool()));
+        ToolRegistry toolRegistry = new ToolRegistry(List.of(
+                new StubTool(),
+                new SearchStubTool(),
+                new SchemaStubTool()
+        ));
         PlannerPromptCatalog promptCatalog = new PlannerPromptCatalog(objectMapper);
         planner = new OpenAiCompatiblePlanner(
                 objectMapper,
@@ -167,6 +171,73 @@ class OpenAiCompatiblePlannerTest {
     }
 
     @Test
+    void letsTheModelRepairAColumnMissingFromADerivedTableBeforePreview() throws Exception {
+        respondWithContent(
+                "{\"action\":\"final\",\"rationale\":\"按状态查询订单\","
+                        + "\"toolName\":\"run_readonly_sql\",\"arguments\":{\"sql\":"
+                        + "\"SELECT o.status FROM (SELECT order_id FROM fact_order) o "
+                        + "WHERE o.status = 'COMPLETED'\"}}",
+                16,
+                8
+        );
+        respondWithContent(
+                "{\"action\":\"final\",\"rationale\":\"补全子查询所需字段\","
+                        + "\"toolName\":\"run_readonly_sql\",\"arguments\":{\"sql\":"
+                        + "\"SELECT o.status FROM (SELECT order_id, status FROM fact_order) o "
+                        + "WHERE o.status = 'COMPLETED'\"}}",
+                24,
+                9
+        );
+
+        var plan = planner.plan("查询已完成订单");
+
+        assertThat(plan.planningSteps()).singleElement().satisfies(step -> {
+            assertThat(step.result().success()).isFalse();
+            assertThat(step.result().summary()).contains("未从子查询暴露");
+        });
+        assertThat(plan.invocations()).singleElement().satisfies(invocation ->
+                assertThat(invocation.arguments().get("sql").toString())
+                        .contains("SELECT order_id, status FROM fact_order"));
+        JsonNode sent = objectMapper.readTree(requestBody.get());
+        assertThat(sent.path("messages").toString()).contains("未从子查询暴露");
+    }
+
+    @Test
+    void groundsDisplayNamesBeforeSubmittingATableSchemaPlan() throws Exception {
+        respondWithContent(
+                "{\"action\":\"final\",\"rationale\":\"查看订单事实表字段\","
+                        + "\"toolName\":\"get_table_schema\","
+                        + "\"arguments\":{\"tableName\":\"订单事实表\"}}",
+                12,
+                5
+        );
+        respondWithContent(
+                "{\"action\":\"inspect\",\"rationale\":\"先查找真实表名\","
+                        + "\"toolName\":\"search_metadata\","
+                        + "\"arguments\":{\"query\":\"订单事实表\"}}",
+                18,
+                6
+        );
+        respondWithContent(
+                "{\"action\":\"final\",\"rationale\":\"查看订单事实表字段\","
+                        + "\"toolName\":\"get_table_schema\","
+                        + "\"arguments\":{\"tableName\":\"fact_order\"}}",
+                24,
+                7
+        );
+
+        var plan = planner.plan("查看订单事实表字段");
+
+        assertThat(plan.planningSteps()).hasSize(2);
+        assertThat(plan.planningSteps().get(0).result().summary()).contains("中文展示名");
+        assertThat(plan.planningSteps().get(1).invocation().toolName()).isEqualTo("search_metadata");
+        assertThat(plan.invocations()).singleElement().satisfies(invocation -> {
+            assertThat(invocation.toolName()).isEqualTo("get_table_schema");
+            assertThat(invocation.arguments()).containsEntry("tableName", "fact_order");
+        });
+    }
+
+    @Test
     void rejectsUnknownToolName() throws Exception {
         respondWithContent(
                 "{\"action\":\"final\",\"rationale\":\"尝试调用未注册工具\",\"toolName\":\"drop_table\",\"arguments\":{}}",
@@ -261,6 +332,15 @@ class OpenAiCompatiblePlannerTest {
         }
 
         @Override
+        public String validate(Map<String, Object> arguments) {
+            String sql = String.valueOf(arguments.getOrDefault("sql", ""));
+            if (sql.contains("SELECT o.status FROM (SELECT order_id FROM fact_order)")) {
+                return "SQL 语义校验失败：引用了不存在、歧义或未从子查询暴露的字段：o.status";
+            }
+            return null;
+        }
+
+        @Override
         public ToolResult execute(Map<String, Object> arguments) {
             return ToolResult.success("ok", Map.of());
         }
@@ -290,6 +370,41 @@ class OpenAiCompatiblePlannerTest {
         @Override
         public ToolResult execute(Map<String, Object> arguments) {
             return ToolResult.success("found", Map.of("rows", List.of(Map.of("table_name", "fact_order"))));
+        }
+    }
+
+    private static final class SchemaStubTool implements AgentTool {
+        @Override
+        public String name() {
+            return "get_table_schema";
+        }
+
+        @Override
+        public String description() {
+            return "Read a catalog table schema";
+        }
+
+        @Override
+        public Map<String, Object> inputSchema() {
+            return Map.of(
+                    "type", "object",
+                    "properties", Map.of("tableName", Map.of("type", "string")),
+                    "required", List.of("tableName"),
+                    "additionalProperties", false
+            );
+        }
+
+        @Override
+        public String validate(Map<String, Object> arguments) {
+            String tableName = String.valueOf(arguments.getOrDefault("tableName", ""));
+            return tableName.matches("[a-z0-9_]+")
+                    ? null
+                    : "tableName 必须使用数据目录中的技术表名，不能使用中文展示名：" + tableName;
+        }
+
+        @Override
+        public ToolResult execute(Map<String, Object> arguments) {
+            return ToolResult.success("schema", Map.of());
         }
     }
 }

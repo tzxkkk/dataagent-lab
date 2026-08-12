@@ -7,18 +7,31 @@ import net.sf.jsqlparser.statement.select.Select;
 import net.sf.jsqlparser.util.TablesNamesFinder;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.QueryTimeoutException;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.BadSqlGrammarException;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 @Component
 public class ReadOnlySqlTool implements AgentTool {
     private static final int MAX_ROWS = 200;
+    private static final Pattern MYSQL_UNKNOWN_COLUMN = Pattern.compile(
+            "Unknown column '([^']+)'",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern H2_UNKNOWN_COLUMN = Pattern.compile(
+            "Column \\\"([^\\\"]+)\\\" not found",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern MYSQL_AMBIGUOUS_COLUMN = Pattern.compile(
+            "Column '([^']+)'.*ambiguous",
+            Pattern.CASE_INSENSITIVE
+    );
     private static final Set<String> INTERNAL_TABLES = Set.of(
             "agent_run",
             "agent_trace_event",
@@ -124,7 +137,7 @@ public class ReadOnlySqlTool implements AgentTool {
         if (normalized.contains(" union all ") && groupByCount(normalized) > 1) {
             return "跨分表聚合必须先用 UNION ALL 合并明细，再由外层 SELECT 统一聚合";
         }
-        return null;
+        return validateQuerySemantics(sql);
     }
 
     private String simpleTableName(String tableName) {
@@ -148,6 +161,39 @@ public class ReadOnlySqlTool implements AgentTool {
 
     private boolean hasLimit(String sql) {
         return sql.toLowerCase(Locale.ROOT).matches("(?s).*\\blimit\\s+\\d+.*");
+    }
+
+    private String validateQuerySemantics(String sql) {
+        try {
+            jdbcTemplate.queryForList("EXPLAIN " + sql);
+            return null;
+        } catch (RuntimeException exception) {
+            return semanticValidationMessage(exception);
+        }
+    }
+
+    private String semanticValidationMessage(RuntimeException exception) {
+        String detail = exception instanceof DataAccessException dataAccessException
+                ? dataAccessException.getMostSpecificCause().getMessage()
+                : exception.getMessage();
+        String identifier = firstMatch(detail, MYSQL_UNKNOWN_COLUMN, H2_UNKNOWN_COLUMN, MYSQL_AMBIGUOUS_COLUMN);
+        if (identifier != null) {
+            return "SQL 语义校验失败：引用了不存在、歧义或未从子查询暴露的字段：" + identifier;
+        }
+        return "SQL 语义校验失败：字段、别名或表结构不匹配";
+    }
+
+    private String firstMatch(String value, Pattern... patterns) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        for (Pattern pattern : patterns) {
+            var matcher = pattern.matcher(value);
+            if (matcher.find()) {
+                return matcher.group(1);
+            }
+        }
+        return null;
     }
 
     private String executionFailureMessage(RuntimeException exception) {

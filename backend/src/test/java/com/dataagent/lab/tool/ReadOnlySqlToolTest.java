@@ -71,10 +71,23 @@ class ReadOnlySqlToolTest {
     }
 
     @Test
-    void translatesDatabaseGrammarErrorsForUsers() {
+    void rejectsUnknownColumnsBeforeExecution() {
         var result = tool.execute(Map.of("sql", "SELECT missing_column FROM fact_order"));
 
         assertThat(result.success()).isFalse();
-        assertThat(result.summary()).isEqualTo("SQL 执行失败：字段、表名或 SQL 结构不正确");
+        assertThat(result.summary()).contains("SQL 语义校验失败");
+        assertThat(result.summary()).containsIgnoringCase("missing_column");
+    }
+
+    @Test
+    void rejectsColumnsNotProjectedByDerivedTablesBeforeExecution() {
+        var result = tool.execute(Map.of(
+                "sql",
+                "SELECT o.status FROM (SELECT order_id FROM fact_order) o WHERE o.status = 'COMPLETED'"
+        ));
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.summary()).contains("SQL 语义校验失败");
+        assertThat(result.summary()).containsIgnoringCase("status");
     }
 }

@@ -68,7 +68,7 @@ const selectedPlanner = ref('openai')
 const evaluationPlanner = ref('offline')
 const planners = ref<PlannerDescriptor[]>([
   { mode: 'offline', promptVersion: 'offline-rules-v2', model: 'deterministic', ready: true },
-  { mode: 'openai', promptVersion: 'data-planner-v3', model: '未配置', ready: false },
+  { mode: 'openai', promptVersion: 'data-planner-v5', model: '未配置', ready: false },
 ])
 
 const selectedDescriptor = computed(() => planners.value.find((item) => item.mode === selectedPlanner.value))
