@@ -6,19 +6,29 @@ import java.util.Collections;
 import java.util.List;
 
 public final class AgentRun {
+    // 身份信息
     private final String id;
     private final String input;
     private final String parentRunId;
     private final Instant createdAt;
+
+    // 过程轨迹
     private final List<TraceEvent> events = new ArrayList<>();
     private final List<String> executedTools = new ArrayList<>();
+
+    // 运行中上下文
     private RunStatus status;
     private String effectiveInput;
     private String plannerMode;
     private PlannerUsage plannerUsage;
+
+    // 用户交互数据
     private ClarificationPrompt clarification;
     private PlanPreview planPreview;
+
+
     private RunEvidence evidence;
+    // 反馈
     private RunFeedback feedback;
     private String output;
     private String error;

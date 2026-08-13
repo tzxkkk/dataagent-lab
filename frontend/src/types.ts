@@ -5,6 +5,7 @@ export type RunStatus =
   | 'WAITING_FOR_APPROVAL'
   | 'RUNNING'
   | 'SUCCEEDED'
+  | 'DATA_UNAVAILABLE'
   | 'NOT_IMPLEMENTED'
   | 'FAILED'
 

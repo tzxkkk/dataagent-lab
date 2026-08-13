@@ -68,7 +68,7 @@ const selectedPlanner = ref('openai')
 const evaluationPlanner = ref('offline')
 const planners = ref<PlannerDescriptor[]>([
   { mode: 'offline', promptVersion: 'offline-rules-v2', model: 'deterministic', ready: true },
-  { mode: 'openai', promptVersion: 'data-planner-v6', model: '未配置', ready: false },
+  { mode: 'openai', promptVersion: 'data-planner-v7', model: '未配置', ready: false },
 ])
 
 const selectedDescriptor = computed(() => planners.value.find((item) => item.mode === selectedPlanner.value))
@@ -201,7 +201,7 @@ function statusLabel(status: AgentRun['status']) {
   const labels: Record<AgentRun['status'], string> = {
     CREATED: '已创建', PLANNING: '规划中', WAITING_FOR_CLARIFICATION: '等待澄清',
     WAITING_FOR_APPROVAL: '等待确认', RUNNING: '执行中', SUCCEEDED: '已完成',
-    NOT_IMPLEMENTED: '待完成', FAILED: '失败',
+    DATA_UNAVAILABLE: '无匹配数据', NOT_IMPLEMENTED: '待完成', FAILED: '失败',
   }
   return labels[status]
 }
@@ -228,6 +228,7 @@ function eventTypeLabel(type: string) {
     TOOL_STARTED: '开始执行工具',
     TOOL_SUCCEEDED: '工具执行成功',
     RUN_SUCCEEDED: '请求执行成功',
+    DATA_CATALOG_UNAVAILABLE: '数据目录不支持',
     CAPABILITY_NOT_IMPLEMENTED: '功能待完成',
     RUN_FAILED: '请求执行失败',
     REVISION_REQUESTED: '请求修改计划',
@@ -242,6 +243,7 @@ function displayValue(value: unknown) {
 
 function eventIcon(traceEvent: TraceEvent) {
   if (traceEvent.type.includes('FAILED')) return CircleAlert
+  if (traceEvent.type.includes('UNAVAILABLE')) return CircleAlert
   if (traceEvent.type.includes('NOT_IMPLEMENTED')) return Clock3
   if (traceEvent.type.includes('TOOL')) return Wrench
   if (traceEvent.type.includes('PLAN')) return ListTree
@@ -406,6 +408,16 @@ function eventIcon(traceEvent: TraceEvent) {
           <div class="capability-boundary">
             <strong>当前已实现</strong><span>找表、查看字段、生成并执行单条只读 SELECT</span>
           </div>
+        </section>
+
+        <section v-if="run?.status === 'DATA_UNAVAILABLE'" class="workflow-card not-implemented-card">
+          <span class="card-kicker"><Search :size="16" />没有匹配的数据</span>
+          <h2>当前数据目录暂不支持这个需求</h2>
+          <p>{{ run.output }}</p>
+          <div class="capability-boundary">
+            <strong>系统已拦截</strong><span>没有生成或执行 SQL，也没有猜测不存在的表和字段</span>
+          </div>
+          <button class="secondary-button" @click="openRevision"><PencilLine :size="16" />修改问题后重试</button>
         </section>
 
         <section v-if="run?.status === 'FAILED'" class="workflow-card failure-card">

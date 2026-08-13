@@ -9,7 +9,7 @@ import java.util.List;
 
 @Component
 public class PlannerPromptCatalog {
-    public static final String VERSION = "data-planner-v6";
+    public static final String VERSION = "data-planner-v7";
 
     private final ObjectMapper objectMapper;
 
@@ -48,6 +48,9 @@ public class PlannerPromptCatalog {
                     - Use inspect only with search_datasets, get_dataset_context, search_metadata,
                       get_table_schema, or resolve_dataset_tables.
                     - Never invent a table, column, partition, join, status value, or business definition.
+                    - If a catalog search returns no rows, try at most one materially different catalog search
+                      to confirm coverage. Never keep changing keywords or invent SQL when the requested data
+                      is absent. The backend will stop planning after two catalog misses.
                     - If inspection reveals multiple valid fields or related datasets for the requested metric
                       or dimension, return clarify and present those business meanings instead of choosing one.
                     - For a data query, inspect the relevant dataset, physical mappings, relationships,

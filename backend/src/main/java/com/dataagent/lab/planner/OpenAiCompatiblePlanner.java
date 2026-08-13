@@ -35,6 +35,7 @@ import java.util.function.Consumer;
 
 @Component
 public class OpenAiCompatiblePlanner implements AgentPlanner {
+    private static final int MAX_CATALOG_MISSES = 2;
     private static final Set<String> INSPECTION_TOOLS = Set.of(
             "search_datasets",
             "get_dataset_context",
@@ -106,6 +107,7 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
         int inputTokens = 0;
         int outputTokens = 0;
         String actualModel = model;
+        int catalogMisses = 0;
 
         // 一轮模型响应只能选择 clarify、inspect 或 final；inspect 结果会加入上下文后继续规划。
         for (int attempt = 0; attempt <= maxPlanningSteps; attempt++) {
@@ -199,6 +201,16 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
                 result = ToolResult.failure("工具参数被拒绝：" + exception.getMessage());
             }
             recordStep(planningSteps, planningObserver, new PlanningToolStep(invocation, result));
+            if (isCatalogMiss(invocation, result)) {
+                catalogMisses++;
+                if (catalogMisses >= MAX_CATALOG_MISSES) {
+                    throw new DataCatalogUnavailableException(
+                            "当前数据目录中没有找到与该需求匹配的数据集或数据表，已停止规划，避免模型猜测不存在的表和字段。"
+                    );
+                }
+            } else if (hasCatalogEvidence(result)) {
+                catalogMisses = 0;
+            }
             appendToolResult(messages, turn.content(), invocation, result);
         }
 
@@ -303,11 +315,44 @@ public class OpenAiCompatiblePlanner implements AgentPlanner {
             ));
             messages.add(Map.of(
                     "role", "user",
-                    "content", "Backend inspection tool result. Continue planning from this evidence:\n" + toolResult
+                    "content", "后端检查工具结果如下。只能依据这些证据继续规划；如果结果为空，只允许再换一种目录或关键词确认一次，禁止猜测不存在的表和字段：\n"
+                            + toolResult
             ));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("无法序列化规划工具结果", exception);
         }
+    }
+
+    private boolean isCatalogMiss(ToolInvocation invocation, ToolResult result) {
+        if (!INSPECTION_TOOLS.contains(invocation.toolName())) {
+            return false;
+        }
+        if (!result.success()) {
+            String summary = result.summary() == null ? "" : result.summary();
+            return summary.contains("未知逻辑数据集")
+                    || summary.contains("不存在该表")
+                    || summary.contains("找不到数据表");
+        }
+        return isEmptyCollection(result.data().get("rows"))
+                || isEmptyCollection(result.data().get("physicalTables"));
+    }
+
+    private boolean hasCatalogEvidence(ToolResult result) {
+        if (!result.success()) {
+            return false;
+        }
+        return isNonEmptyCollection(result.data().get("rows"))
+                || isNonEmptyCollection(result.data().get("columns"))
+                || isNonEmptyCollection(result.data().get("physicalTables"))
+                || result.data().get("dataset") != null;
+    }
+
+    private boolean isEmptyCollection(Object value) {
+        return value instanceof java.util.Collection<?> collection && collection.isEmpty();
+    }
+
+    private boolean isNonEmptyCollection(Object value) {
+        return value instanceof java.util.Collection<?> collection && !collection.isEmpty();
     }
 
     private void recordStep(

@@ -121,7 +121,7 @@ class OpenAiCompatiblePlannerTest {
         assertThat(plan.usage().inputTokens()).isEqualTo(34);
         assertThat(plan.usage().outputTokens()).isEqualTo(11);
         JsonNode sent = objectMapper.readTree(requestBody.get());
-        assertThat(sent.path("messages").toString()).contains("Backend inspection tool result", "fact_order");
+        assertThat(sent.path("messages").toString()).contains("后端检查工具结果", "fact_order");
     }
 
     @Test
@@ -235,6 +235,32 @@ class OpenAiCompatiblePlannerTest {
             assertThat(invocation.toolName()).isEqualTo("get_table_schema");
             assertThat(invocation.arguments()).containsEntry("tableName", "fact_order");
         });
+    }
+
+    @Test
+    void stopsAfterTwoEmptyCatalogSearchesInsteadOfLooping() throws Exception {
+        respondWithContent(
+                "{\"action\":\"inspect\",\"rationale\":\"先搜索床位相关数据集\","
+                        + "\"toolName\":\"search_metadata\",\"arguments\":{\"query\":\"missing-bed\"}}",
+                12,
+                5
+        );
+        respondWithContent(
+                "{\"action\":\"inspect\",\"rationale\":\"再确认房间相关数据表\","
+                        + "\"toolName\":\"search_metadata\",\"arguments\":{\"query\":\"missing-room\"}}",
+                18,
+                6
+        );
+
+        List<PlanningToolStep> observedSteps = new ArrayList<>();
+
+        assertThatThrownBy(() -> planner.plan(
+                "统计2024年1月至2024年6月各楼栋各房间的空余床位数量",
+                observedSteps::add
+        ))
+                .isInstanceOf(DataCatalogUnavailableException.class)
+                .hasMessageContaining("当前数据目录中没有找到");
+        assertThat(observedSteps).hasSize(2);
     }
 
     @Test
@@ -369,6 +395,10 @@ class OpenAiCompatiblePlannerTest {
 
         @Override
         public ToolResult execute(Map<String, Object> arguments) {
+            String query = String.valueOf(arguments.getOrDefault("query", ""));
+            if (query.startsWith("missing-")) {
+                return ToolResult.success("found 0", Map.of("rows", List.of()));
+            }
             return ToolResult.success("found", Map.of("rows", List.of(Map.of("table_name", "fact_order"))));
         }
     }

@@ -11,6 +11,7 @@ import com.dataagent.lab.domain.ToolInvocation;
 import com.dataagent.lab.domain.ToolResult;
 import com.dataagent.lab.domain.TraceEvent;
 import com.dataagent.lab.planner.AgentPlanner;
+import com.dataagent.lab.planner.DataCatalogUnavailableException;
 import com.dataagent.lab.planner.PlannerDescriptor;
 import com.dataagent.lab.planner.PlannerRegistry;
 import com.dataagent.lab.repository.AgentRunRepository;
@@ -72,6 +73,8 @@ public class AgentRunService {
                     execute(run, plan);
                 }
             }
+        } catch (DataCatalogUnavailableException exception) {
+            dataUnavailable(run, exception);
         } catch (RuntimeException exception) {
             fail(run, exception);
         } finally {
@@ -106,6 +109,8 @@ public class AgentRunService {
                     plan(run, true);
                 }
             }
+        } catch (DataCatalogUnavailableException exception) {
+            dataUnavailable(run, exception);
         } catch (RuntimeException exception) {
             fail(run, exception);
         } finally {
@@ -130,6 +135,8 @@ public class AgentRunService {
                 if (!markNotImplemented(run)) {
                     plan(run, true);
                 }
+            } catch (DataCatalogUnavailableException exception) {
+                dataUnavailable(run, exception);
             } catch (RuntimeException exception) {
                 fail(run, exception);
             } finally {
@@ -320,6 +327,18 @@ public class AgentRunService {
         run.setStatus(RunStatus.FAILED);
         run.setError(message);
         event(run, "RUN_FAILED", message, Map.of());
+    }
+
+    private void dataUnavailable(AgentRun run, DataCatalogUnavailableException exception) {
+        pendingPlans.remove(run.getId());
+        runRepository.deletePendingPlan(run.getId());
+        run.setStatus(RunStatus.DATA_UNAVAILABLE);
+        run.setOutput(exception.getMessage());
+        run.setError(null);
+        event(run, "DATA_CATALOG_UNAVAILABLE", exception.getMessage(), Map.of(
+                "reason", "NO_MATCHING_CATALOG_DATA",
+                "executedSql", false
+        ));
     }
 
     private boolean markNotImplemented(AgentRun run) {
